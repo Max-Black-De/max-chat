@@ -6,12 +6,15 @@ import {
   type SessionControllerDeps,
 } from '../../store';
 import { config } from '../../config';
+import type { PollingDeps } from '../polling/pollingDeps';
 import { SessionContext, type SessionContextValue } from './sessionContext';
 
 export type SessionProviderDeps = Omit<SessionControllerDeps, 'dispatch'> & {
   /** Есть ли Web Locks API (по умолчанию — проверка `navigator.locks`). */
   locksSupported?: boolean;
   defaultApiUrl?: string;
+  /** Опрос очереди F5 (для тестов): замки, пауза backoff, лог. */
+  polling?: PollingDeps;
 };
 
 function hasWebLocks(): boolean {
@@ -29,6 +32,7 @@ export function SessionProvider({
   children: ReactNode;
   deps?: SessionProviderDeps;
 }) {
+  // `polling` уходит в контроллер вместе с остальным и там не читается (его берёт App → Poller).
   const { locksSupported: locksOverride, defaultApiUrl, ...controllerDeps } = deps;
   const [state, dispatch] = useReducer(sessionReducer, undefined, () =>
     createInitialSessionState({ apiUrl: defaultApiUrl ?? config.defaultApiUrl }),

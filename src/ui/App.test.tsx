@@ -297,15 +297,21 @@ describe('getSettings: П-1…П-4 (п. 1.7, ВА-1, ВА-6, EC-E3…EC-E5)', ()
     api.set('getSettings', [{ deferred: gate }]);
     fireEvent.click(recheck);
     expect(recheck).toBeDisabled();
+    // При П-1 опрос не запускался (ВА-6).
+    expect(api.callsOf('receiveNotification')).toHaveLength(0);
     gate.release({ body: OK_SETTINGS });
     await waitFor(() => {
       expect(screen.queryByTestId('banner-p1')).toBeNull();
     });
-    expect(api.calls.map((c) => c.method)).toEqual([
-      'getStateInstance',
-      'getSettings',
-      'getSettings',
-    ]);
+    // П-1 снят — опрос F5 стартует сам (EC-P12).
+    await waitFor(() => {
+      expect(api.calls.map((c) => c.method)).toEqual([
+        'getStateInstance',
+        'getSettings',
+        'getSettings',
+        'receiveNotification',
+      ]);
+    });
   });
 
   it('ошибка getSettings: предупреждений нет, console.warn без токена', async () => {
@@ -391,13 +397,17 @@ describe('в работе: сессия, баннеры, вкладки (§5.4, 
   });
 
   it('«Нет соединения»: после 2 сетевых ошибок опроса; скрывается после успеха; событие offline — сразу', async () => {
-    await mainWithProbe({
-      receiveNotification: [
-        { throws: new TypeError('x') },
-        { throws: new TypeError('x') },
-        { body: '' },
-      ],
-    });
+    // Опрос F5 выключен: receive вызывает сам тест.
+    await mainWithProbe(
+      {
+        receiveNotification: [
+          { throws: new TypeError('x') },
+          { throws: new TypeError('x') },
+          { body: '' },
+        ],
+      },
+      { polling: { enabled: false } },
+    );
     const recv = () =>
       act(async () => {
         await probeRef.current?.controller

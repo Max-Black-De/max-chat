@@ -54,9 +54,16 @@ export const DEFAULT_ROUTES: Partial<Record<ApiMethodName, Reply[]>> = {
 export { OK_SETTINGS };
 
 /**
- * fetch по маршрутам: для каждого метода — очередь ответов, последний повторяется.
- * Метод без маршрута — 500 (и тест это увидит в `calls`).
+ * Ответ метода без маршрута. receive без маршрута висит до отмены (как пустой long polling:
+ * опрос F5 работает в каждом тесте вошедшей сессии и не должен шуметь), delete — удалено;
+ * прочие — 500 (и тест это увидит в `calls`).
  */
+const UNROUTED: Partial<Record<string, Reply>> = {
+  receiveNotification: { hang: true },
+  deleteNotification: { body: { result: true, reason: '' } },
+};
+
+/** fetch по маршрутам: для каждого метода — очередь ответов, последний повторяется. */
 export function routeFetch(routes: Partial<Record<ApiMethodName, Reply[]>> = DEFAULT_ROUTES) {
   const calls: Call[] = [];
   const queues = new Map<string, Reply[]>(
@@ -67,7 +74,7 @@ export function routeFetch(routes: Partial<Record<ApiMethodName, Reply[]>> = DEF
     const method = /\/waInstance\d+\/([A-Za-z]+)\//.exec(url)?.[1] ?? '?';
     calls.push({ method, url, init });
     const q = queues.get(method) ?? [];
-    let reply: Reply = (q.length > 1 ? q.shift() : q[0]) ?? { status: 500 };
+    let reply: Reply = (q.length > 1 ? q.shift() : q[0]) ?? UNROUTED[method] ?? { status: 500 };
     if ('deferred' in reply) reply = await reply.deferred.promise;
     const signal = init.signal;
     if ('throws' in reply) throw reply.throws;
