@@ -8,6 +8,7 @@ import { useChats, type ChatsContextValue } from './chatsContext';
 import { ChatsProvider } from './ChatsProvider';
 import { ChatList } from './ChatList';
 import { ChatPane } from './ChatPane';
+import { MessagesProvider } from '../messages/MessagesProvider';
 import { SessionProvider } from '../session/SessionProvider';
 import { CHECK_ACCOUNT_TEXTS, SEND_TEXTS } from '../../api';
 import { SESSION_CREDENTIALS_KEY } from '../../store';
@@ -248,9 +249,11 @@ describe('список чатов (§4.0 п. 2, п. 5.2, ВА-15)', () => {
       if (state.status !== 'loggedIn') return null;
       return (
         <ChatsProvider key={state.generation}>
-          <ChatsProbe />
-          <ChatList />
-          <ChatPane />
+          <MessagesProvider>
+            <ChatsProbe />
+            <ChatList />
+            <ChatPane />
+          </MessagesProvider>
         </ChatsProvider>
       );
     }

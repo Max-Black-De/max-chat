@@ -31,4 +31,15 @@ export const UI_TEXTS = {
   noChats: 'Чатов пока нет',
   chatListLabel: 'Чаты',
   unreadLabel: 'Непрочитанные',
+  /** Окно чата (§4.0 п. 2, п. 3.1–3.5, п. 5.6). */
+  send: 'Отправить',
+  retry: 'Повторить',
+  statusSending: 'отправляется',
+  statusError: 'не отправлено',
+  newMessages: '↓ новые сообщения',
+  /** Не из ТЗ: подсказка в поле ввода и подписи для доступности. */
+  composerPlaceholder: 'Сообщение',
+  composerLabel: 'Текст сообщения',
+  messagesLabel: 'Сообщения',
+  noMessages: 'Сообщений пока нет',
 } as const;

@@ -1,10 +1,12 @@
 import { chatSubtitle, chatTitle, selectSelectedChat } from '../../store';
+import { Composer } from '../messages/Composer';
+import { MessageList } from '../messages/MessageList';
 import { UI_TEXTS } from '../texts';
 import { useChats } from './chatsContext';
 
 /**
- * Правая колонка (§4.0 п. 2): шапка выбранного чата (Р-15) или заглушка. Лента и ввод — F4
- * (встраиваются в `chat-window` вместо `chat-body`).
+ * Правая колонка (§4.0 п. 2): шапка выбранного чата (Р-15), лента и поле ввода (F4) или
+ * заглушка. Лента и поле монтируются на чат: прокрутка и черновик не переходят в другой чат.
  */
 export function ChatPane() {
   const { state } = useChats();
@@ -28,7 +30,8 @@ export function ChatPane() {
           </span>
         ) : null}
       </header>
-      <div className="chat-body" data-testid="chat-body" />
+      <MessageList key={`list-${chat.chatId}`} chatId={chat.chatId} />
+      <Composer key={`composer-${chat.chatId}`} chatId={chat.chatId} />
     </div>
   );
 }
