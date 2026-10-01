@@ -27,9 +27,21 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'e2e/**', 'src/main.tsx', 'src/**/*.d.ts'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/**/__tests__/**',
+        'src/test/**',
+        'e2e/**',
+        'src/main.tsx',
+        'src/**/*.d.ts',
+      ],
       // НФТ-9: покрытие модулей нормализации, разбора уведомлений, дедупа и reducer ≥ 80 %.
-      // Пороги включаются, когда появится логика (F3, F5, Q2).
+      // Пороги по папкам (glob): api/ (F1) и notifications/ (F5). Папка без файлов под glob
+      // проверку не роняет. store/ и polling/ добавятся с логикой (F3, F5, Q2).
+      thresholds: {
+        'src/api/**/*.ts': { lines: 80, functions: 80, branches: 80, statements: 80 },
+        'src/notifications/**/*.ts': { lines: 80, functions: 80, branches: 80, statements: 80 },
+      },
     },
   },
 });
