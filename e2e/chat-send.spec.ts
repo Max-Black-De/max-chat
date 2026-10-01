@@ -9,6 +9,8 @@ import {
   ID_INSTANCE,
   PHONES,
   checkAccountResponses,
+  deleteResponses,
+  emptyReceiveResponses,
   messageTexts,
   sendMessageResponses,
   settingsResponses,
@@ -39,6 +41,9 @@ test.beforeEach(({ greenApi }) => {
     .on('getStateInstance', stateResponses.authorized)
     .on('getSettings', settingsResponses.ok)
     .on('checkAccount', checkAccountResponses.exists)
+    // Опрос F5: пустой long polling (с задержкой, чтобы не крутить цикл) и delete.
+    .on('receiveNotification', delayed(emptyReceiveResponses.emptyBody, 500))
+    .on('deleteNotification', deleteResponses.ok)
     // Каждому сообщению — свой idMessage: одинаковый означал бы «уже пришло уведомлением» (§6.3).
     .on('sendMessage', [
       sendMessageResponses.sent,
