@@ -178,6 +178,9 @@ export async function send(
     }
     // Ответ пришёл после close() (fetch не уважил abort или успел раньше) — отбрасываем (EC-S7).
     if (isClosed()) throw closedError();
+    // Внешний signal отменён, пока читалось тело: ответ не обрабатывается и не удаляется (EC-P16).
+    if (outer?.aborted)
+      throw errorFor(ctx, req, GreenApiErrorCode.ABORTED, { reason: 'aborted after response' });
     ctx.logger?.debug?.('GREEN-API response', {
       method: req.method,
       http: req.http,

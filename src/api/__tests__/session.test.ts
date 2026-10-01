@@ -217,6 +217,55 @@ describe('close(): ответы старой сессии отбрасывают
   });
 });
 
+describe('внешний signal отменён, пока читалось тело → ABORTED (EC-P16)', () => {
+  /** fetch, у которого `text()` сам отменяет внешний signal и всё равно отдаёт тело. */
+  function abortDuringBody(ctrl: AbortController, body: object) {
+    const calls: string[] = [];
+    const fn = (input: RequestInfo | URL): Promise<Response> => {
+      calls.push(String(input instanceof Request ? input.url : input));
+      const res = new Response(JSON.stringify(body), { status: 200 });
+      Object.defineProperty(res, 'text', {
+        value: () => {
+          ctrl.abort();
+          return Promise.resolve(JSON.stringify(body));
+        },
+      });
+      return Promise.resolve(res);
+    };
+    return { fetch: fn, calls };
+  }
+
+  it.each<[string, object]>([
+    ['receiveNotification', { receiptId: 5, body: { typeWebhook: 'incomingMessageReceived' } }],
+    ['getStateInstance', { stateInstance: 'authorized' }],
+    ['sendMessage', { idMessage: '1790000000123' }],
+    ['deleteNotification', { result: true }],
+  ])('%s: ответ после abort не обрабатывается', async (name, body) => {
+    const ctrl = new AbortController();
+    const f = abortDuringBody(ctrl, body);
+    const c = makeClient(f.fetch);
+    const e = (await catchError(run(name)(c, ctrl.signal))) as GreenApiError;
+    expect(e.code).toBe(C.ABORTED);
+    expect(e.retry).toBe('none');
+    expect(e.receiptId).toBeUndefined();
+    expect(f.calls).toHaveLength(1);
+  });
+
+  it('fetch проигнорировал abort и ответил позже → ABORTED, receiptId не отдаётся', async () => {
+    const f = lateFetch({ receiptId: 5, body: { typeWebhook: 'incomingMessageReceived' } });
+    const ctrl = new AbortController();
+    const c = makeClient(f.fetch);
+    const p = catchError(c.receiveNotification({ signal: ctrl.signal }));
+    await Promise.resolve();
+    ctrl.abort();
+    f.release();
+    const e = (await p) as GreenApiError;
+    expect(e.code).toBe(C.ABORTED);
+    expect(e.receiptId).toBeUndefined();
+    expect(c.isClosed()).toBe(false);
+  });
+});
+
 describe('токен не попадает в ошибки и логи, включая TypeError fetch с URL, cause и stack (EC-X1, EC-T6)', () => {
   const tokenUrl = `https://api.example.test/waInstance110000000042/getSettings/${FAKE_TOKEN}`;
   const fetchErrors: [string, unknown][] = [
