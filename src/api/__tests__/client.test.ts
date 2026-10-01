@@ -1,0 +1,287 @@
+import { describe, expect, it } from 'vitest';
+import { GreenApiError, GreenApiErrorCode } from '../errors';
+import { messageLength } from '../client';
+import {
+  incomingChannelImage,
+  incomingGroupTextQuoted,
+  incomingPersonalText,
+  outgoingApiExtendedText,
+  outgoingPhoneText,
+} from './fixtures/notifications';
+import { catchError, makeClient, mockFetch, blockRealNetwork, callAt, bodyText } from './helpers';
+
+blockRealNetwork();
+
+describe('getStateInstance / getSettings', () => {
+  it('возвращает stateInstance', async () => {
+    const c = makeClient(mockFetch({ body: { stateInstance: 'authorized' } }).fetch);
+    await expect(c.getStateInstance()).resolves.toEqual({ stateInstance: 'authorized' });
+  });
+
+  it('неизвестное значение stateInstance пропускается как строка', async () => {
+    const c = makeClient(mockFetch({ body: { stateInstance: 'somethingNew' } }).fetch);
+    await expect(c.getStateInstance()).resolves.toEqual({ stateInstance: 'somethingNew' });
+  });
+
+  it('нет stateInstance → UNEXPECTED_RESPONSE', async () => {
+    const c = makeClient(mockFetch({ body: { foo: 1 } }).fetch);
+    const e = (await catchError(c.getStateInstance())) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
+  });
+
+  it('getSettings возвращает все поля как есть', async () => {
+    const settings = {
+      wid: '79990000000@c.us',
+      webhookUrl: '',
+      incomingWebhook: 'yes',
+      outgoingWebhook: 'no',
+      outgoingAPIMessageWebhook: 'yes',
+      outgoingMessageWebhook: 'yes',
+      stateWebhook: 'no',
+      delaySendMessagesMilliseconds: 500,
+    };
+    const c = makeClient(mockFetch({ body: settings }).fetch);
+    await expect(c.getSettings()).resolves.toEqual(settings);
+  });
+});
+
+describe('checkAccount', () => {
+  it('phoneNumber уходит целым числом, не строкой (§4.2 п. 2.5)', async () => {
+    const m = mockFetch({ body: { exist: true, chatId: '10000002', fromCache: false } });
+    const r = await makeClient(m.fetch).checkAccount('79991234567');
+    expect(r).toEqual({ exist: true, chatId: '10000002', fromCache: false });
+    expect(callAt(m.calls, 0).init.body).toBe('{"phoneNumber":79991234567}');
+  });
+
+  it('принимает номер числом и номер РБ (375…)', async () => {
+    const m = mockFetch({ body: { exist: true, chatId: '10000003', fromCache: true } });
+    await makeClient(m.fetch).checkAccount(375291234567);
+    expect(callAt(m.calls, 0).init.body).toBe('{"phoneNumber":375291234567}');
+  });
+
+  it('exist:false → chatId ""', async () => {
+    const c = makeClient(mockFetch({ body: { exist: false, chatId: '', fromCache: false } }).fetch);
+    await expect(c.checkAccount('79991234567')).resolves.toEqual({
+      exist: false,
+      chatId: '',
+      fromCache: false,
+    });
+  });
+
+  it.each(['89991234567', '+79991234567', '7999123456', '380991234567', '', 'abc'])(
+    'ненормализованный номер %j → INVALID_ARGUMENT без запроса',
+    async (phone) => {
+      const m = mockFetch({ body: {} });
+      const e = (await catchError(makeClient(m.fetch).checkAccount(phone))) as GreenApiError;
+      expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+      expect(m.calls).toHaveLength(0);
+    },
+  );
+
+  it('exist:true без chatId → UNEXPECTED_RESPONSE', async () => {
+    const c = makeClient(mockFetch({ body: { exist: true } }).fetch);
+    const e = (await catchError(c.checkAccount('79991234567'))) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
+  });
+});
+
+describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 п. 3.5)', () => {
+  it('отправляет {chatId, message} и возвращает idMessage строкой', async () => {
+    const m = mockFetch({ body: { idMessage: '1790000000123' } });
+    const r = await makeClient(m.fetch).sendMessage({
+      chatId: '10000002',
+      message: 'Тест\nстрока',
+    });
+    expect(r).toEqual({ idMessage: '1790000000123' });
+    expect(JSON.parse(bodyText(callAt(m.calls, 0)))).toEqual({
+      chatId: '10000002',
+      message: 'Тест\nстрока',
+    });
+  });
+
+  it.each(['79991234567@c.us', '10000002@c.us', '-10000000000001@g.us'])(
+    'chatId %j с @ запрещён, запрос не уходит',
+    async (chatId) => {
+      const m = mockFetch({ body: { idMessage: '1' } });
+      const e = (await catchError(
+        makeClient(m.fetch).sendMessage({ chatId, message: 'x' }),
+      )) as GreenApiError;
+      expect(e).toBeInstanceOf(GreenApiError);
+      expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+      expect(e.reason).toMatch(/@/);
+      expect(e.retry).toBe('none');
+      expect(m.calls).toHaveLength(0);
+    },
+  );
+
+  it.each(['-10000000000001', '', ' 10000002', 'abc'])(
+    'chatId %j (группа/канал/мусор) отклоняется',
+    async (chatId) => {
+      const m = mockFetch({ body: { idMessage: '1' } });
+      const e = (await catchError(
+        makeClient(m.fetch).sendMessage({ chatId, message: 'x' }),
+      )) as GreenApiError;
+      expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+      expect(m.calls).toHaveLength(0);
+    },
+  );
+
+  it('allowedChatIds: чужой chatId → CHAT_ID_NOT_ALLOWED, свой — уходит', async () => {
+    const m = mockFetch({ body: { idMessage: '1790000000123' } });
+    const c = makeClient(m.fetch, { allowedChatIds: ['10000002'] });
+    const e = (await catchError(
+      c.sendMessage({ chatId: '10000003', message: 'x' }),
+    )) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.CHAT_ID_NOT_ALLOWED);
+    expect(m.calls).toHaveLength(0);
+    await c.sendMessage({ chatId: '10000002', message: 'x' });
+    expect(m.calls).toHaveLength(1);
+  });
+
+  it('пустой / пробельный текст и > 4000 символов отклоняются', async () => {
+    const m = mockFetch({ body: { idMessage: '1' } });
+    const c = makeClient(m.fetch);
+    for (const message of ['', '   \n ', 'a'.repeat(4001)]) {
+      const e = (await catchError(c.sendMessage({ chatId: '10000002', message }))) as GreenApiError;
+      expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+    }
+    expect(m.calls).toHaveLength(0);
+    await c.sendMessage({ chatId: '10000002', message: 'a'.repeat(4000) });
+    expect(m.calls).toHaveLength(1);
+  });
+
+  it('длина считается в символах Unicode: 4000 эмодзи допустимы', async () => {
+    expect(messageLength('😀😀')).toBe(2);
+    const m = mockFetch({ body: { idMessage: '1' } });
+    await makeClient(m.fetch).sendMessage({ chatId: '10000002', message: '😀'.repeat(4000) });
+    expect(m.calls).toHaveLength(1);
+  });
+
+  it('нет idMessage → UNEXPECTED_RESPONSE; 18-значный idMessage не теряет точность', async () => {
+    const c1 = makeClient(mockFetch({ body: { foo: 1 } }).fetch);
+    const e = (await catchError(
+      c1.sendMessage({ chatId: '10000002', message: 'x' }),
+    )) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
+    const c2 = makeClient(mockFetch({ body: '{"idMessage":"117900000600000001"}' }).fetch);
+    await expect(c2.sendMessage({ chatId: '10000002', message: 'x' })).resolves.toEqual({
+      idMessage: '117900000600000001',
+    });
+  });
+});
+
+describe('receiveNotification (§5.2)', () => {
+  it.each([
+    ['пустое тело', ''],
+    ['пробелы', '  \n'],
+    ['null', 'null'],
+    ['false', 'false'],
+    ['{}', '{}'],
+    ['без receiptId', '{"body":{}}'],
+    ['receiptId: null', '{"receiptId":null}'],
+  ])('«пустой ответ» (%s) → null', async (_name, text) => {
+    const c = makeClient(mockFetch({ body: text }).fetch);
+    await expect(c.receiveNotification()).resolves.toBeNull();
+  });
+
+  it('пустой ответ 204 → null', async () => {
+    const c = makeClient(mockFetch({ status: 204 }).fetch);
+    await expect(c.receiveNotification()).resolves.toBeNull();
+  });
+
+  it.each([
+    ['outgoingPhoneText', outgoingPhoneText],
+    ['outgoingApiExtendedText', outgoingApiExtendedText],
+    ['incomingGroupTextQuoted', incomingGroupTextQuoted],
+    ['incomingChannelImage', incomingChannelImage],
+    ['incomingPersonalText', incomingPersonalText],
+  ])('фикстура %s возвращается без изменений', async (_name, fx) => {
+    const c = makeClient(mockFetch({ body: JSON.stringify(fx) }).fetch);
+    const r = await c.receiveNotification();
+    expect(r).toEqual(fx);
+    expect(typeof (r?.body as { idMessage: unknown }).idMessage).toBe('string');
+  });
+
+  it('тело неожиданной структуры не мешает получить receiptId (§5.4: удалить и продолжать)', async () => {
+    const c = makeClient(mockFetch({ body: '{"receiptId":77,"body":"garbage"}' }).fetch);
+    await expect(c.receiveNotification()).resolves.toEqual({ receiptId: 77, body: 'garbage' });
+  });
+
+  it('невалидный JSON → INVALID_JSON с receiptId, если его видно в тексте', async () => {
+    const c = makeClient(
+      mockFetch({ body: '{"receiptId": 55, "body": {"typeWebhook": "x", ' }).fetch,
+    );
+    const e = (await catchError(c.receiveNotification())) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.INVALID_JSON);
+    expect(e.receiptId).toBe(55);
+    expect(e.retry).toBe('backoff');
+  });
+
+  it('невалидный receiptId → UNEXPECTED_RESPONSE', async () => {
+    const c = makeClient(mockFetch({ body: '{"receiptId":"abc","body":{}}' }).fetch);
+    const e = (await catchError(c.receiveNotification())) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
+  });
+
+  it('receiveTimeout: по умолчанию 20, валидируется 5..60', async () => {
+    const m = mockFetch({ body: '' });
+    const c = makeClient(m.fetch);
+    await c.receiveNotification({ receiveTimeout: 5 });
+    expect(callAt(m.calls, 0).url).toMatch(/\?receiveTimeout=5$/);
+    for (const receiveTimeout of [4, 61, 2.5]) {
+      const e = (await catchError(c.receiveNotification({ receiveTimeout }))) as GreenApiError;
+      expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+    }
+    expect(m.calls).toHaveLength(1);
+  });
+});
+
+describe('deleteNotification (§5.2, §5.4)', () => {
+  it('result:true', async () => {
+    const c = makeClient(mockFetch({ body: { result: true, reason: '' } }).fetch);
+    await expect(c.deleteNotification(1)).resolves.toEqual({
+      result: true,
+      reason: '',
+      alreadyDeleted: false,
+    });
+  });
+
+  it('result:false → считать удалённым', async () => {
+    const c = makeClient(mockFetch({ body: { result: false, reason: 'not found' } }).fetch);
+    await expect(c.deleteNotification(1)).resolves.toEqual({
+      result: false,
+      reason: 'not found',
+      alreadyDeleted: true,
+    });
+  });
+
+  it("500 «Cannot read properties of undefined (reading 'findUnAckedMessage')» → считать удалённым", async () => {
+    const c = makeClient(
+      mockFetch({
+        status: 500,
+        body: "Cannot read properties of undefined (reading 'findUnAckedMessage')",
+      }).fetch,
+    );
+    await expect(c.deleteNotification(1)).resolves.toMatchObject({
+      result: false,
+      alreadyDeleted: true,
+    });
+  });
+
+  it('прочие 500 → ошибка SERVER с backoff', async () => {
+    const c = makeClient(mockFetch({ status: 500, body: 'Internal error' }).fetch);
+    const e = (await catchError(c.deleteNotification(1))) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.SERVER);
+    expect(e.retry).toBe('backoff');
+  });
+
+  it.each([-1, 1.5, Number.NaN, 2 ** 60])(
+    'receiptId %s → INVALID_ARGUMENT без запроса',
+    async (rid) => {
+      const m = mockFetch({ body: { result: true } });
+      const e = (await catchError(makeClient(m.fetch).deleteNotification(rid))) as GreenApiError;
+      expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+      expect(m.calls).toHaveLength(0);
+    },
+  );
+});
