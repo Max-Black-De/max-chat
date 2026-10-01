@@ -38,17 +38,32 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
   **целым числом**. Нормализация ввода — в F3.
 - `sendMessage`: `chatId` только из цифр (личный чат). Строка с `@` (`…@c.us`) и отрицательные id групп/каналов
   отклоняются **до запроса** (`INVALID_ARGUMENT`, §5.5, Р-26). Пустой/пробельный текст и > 4000 символов
-  (считаются code points) — тоже.
+  (длина = `text.length`, UTF-16: emoji = 2, ВА-14) — тоже. Текст уходит как есть, без trim.
 - `receiveNotification`: пустое тело, `null`/ложное значение, объект без `receiptId` → `null`. HTTP-таймаут
   по умолчанию `RECEIVE_HTTP_TIMEOUT_MS` (30 с) и никогда не меньше `receiveTimeout + 10 с`.
   `body` возвращается как есть (`unknown`) — разбор в `notifications/` (F5) в `NotificationBody` из `types.ts`.
 - `deleteNotification`: `result:false` и 500 `findUnAckedMessage` → `alreadyDeleted: true` без исключения (§5.4).
-- Клиент **сам ничего не повторяет**: на каждый вызов — ровно один `fetch`. Повторы делает вызывающий код по `error.retry`.
+- **Встроенные повторы** (пауза — инъектируемый `sleep(ms, signal)`, по умолчанию на `timers`; отмена во время
+  паузы → `ABORTED`, `close()` → `SESSION_CLOSED`):
+  - `sendMessage` 429 — до 3 автоповторов: `Retry-After` (сек или HTTP-дата), если ≤ 30 с, иначе 1 → 2 → 4 с
+    (ВА-8). Заголовок на `3100.api…` браузеру, скорее всего, не виден (Expose-Headers) — тогда работает запасная
+    схема. Сеть, таймаут, 499, 5xx, 466, 4xx — сразу ошибка, без автоповтора (дубли).
+  - `deleteNotification` — до 3 повторов 1 → 2 → 4 с при сети, таймауте, 429, 499, 5xx (ВА-17).
+  - `checkAccount` — никогда (ВА-7). receive / getStateInstance / getSettings — ровно один `fetch`, повтор — у
+    вызывающего кода по `error.retry`.
+  - `error.attempts` — сколько HTTP-попыток сделано.
+- `close()` / `isClosed()` — конец сессии (выход, смена учётных данных, EC-S7): запросы и паузы прерываются,
+  поздние ответы отбрасываются (`SESSION_CLOSED`), новые вызовы падают без запроса. Новые учётные данные —
+  новый клиент.
+- `validateApiUrl(raw)` — поле «Адрес API»: пусто → `https://api.green-api.com`, только `https:` (ВА-2).
 
 ## Ошибки
 
 Все ошибки — `GreenApiError` (`code`, `method`, `httpStatus?`, `reason?`, `retry`, `maskedUrl?`, `apiUrl?`,
-`receiptId?`); для 466 — подкласс `GreenApiQuotaError` с `quota: QuotaSummary`.
+`receiptId?`, `retryAfterMs?`, `attempts`); для 466 — подкласс `GreenApiQuotaError` с `quota: QuotaSummary`;
+для «сессия невалидна» (401, 403 кроме suspended на send, 400 expired/deleted — EC-E2, EC-P13) — подкласс
+`GreenApiSessionError` (`isSessionInvalidError(e)`): F2/F5 по нему останавливают опрос и выходят на вход.
+`{status:false, reason}` разбирается при любом HTTP-коде (ВА-11).
 `retry`: `backoff` (1→2→4…30 с), `pause` (30 с), `none`.
 
 | code                                       | Когда                                                             | retry           |
@@ -56,23 +71,25 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 | `NETWORK`                                  | fetch упал (сеть, DNS, CORS)                                      | backoff*        |
 | `TIMEOUT`                                  | нет ответа за `timeoutMs`                                         | backoff*        |
 | `ABORTED`                                  | отменён внешним `AbortSignal`                                     | none            |
+| `SESSION_CLOSED`                           | клиент закрыт `close()`, ответ старой сессии отброшен             | none            |
 | `INVALID_JSON` / `UNEXPECTED_RESPONSE`     | 2xx, но не JSON / не та структура                                 | backoff*        |
 | `UNAUTHORIZED`                             | 401                                                               | none            |
 | `FORBIDDEN` / `ACCOUNT_SUSPENDED`          | 403 / 403 `Your account is suspended`                             | none            |
 | `INSTANCE_NOT_READY`                       | 400 или `{status:false}` «instance is starting or not authorized» | pause*          |
-| `INSTANCE_EXPIRED`                         | 400 «account is expired» / «Instance is deleted»                  | none            |
+| `INSTANCE_EXPIRED` / `INSTANCE_DELETED`    | 400 «account is expired» / «Instance is deleted» (сессия)         | none            |
 | `WEBHOOK_URL_SET`                          | 400 «custom webhook url is set» (П-1)                             | none            |
 | `BAD_REQUEST`                              | прочие 400 (`Validation failed…`) — `reason` можно показать       | none            |
 | `NOT_FOUND`                                | 404                                                               | none            |
 | `RATE_LIMITED`                             | 429                                                               | backoff*        |
 | `QUOTA_EXCEEDED`                           | 466 → `GreenApiQuotaError`                                        | **none всегда** |
 | `CHECK_LIMIT`                              | 469, «User get contact info limit reached»                        | none            |
+| `CHECK_TIMEOUT`                            | 400 «check phone number timeout limit exceeded» (ВА-10)           | none            |
 | `SERVER`                                   | 499, 5xx                                                          | backoff*        |
 | `HTTP`                                     | прочие коды                                                       | none            |
 | `INVALID_ARGUMENT` / `CHAT_ID_NOT_ALLOWED` | проверка на клиенте, запрос не отправлялся                        | none            |
 
-\* для `sendMessage` всегда `none` (дубли, §5.4/§4.3 п. 3.4); для `checkAccount` сеть/таймаут/5xx/JSON — `none`
-(запрос мог списать проверку из квоты 100/мес, Р-26 п. 3).
+\* для `sendMessage` и `checkAccount` — всегда `none` (ВА-7, ВА-8: 429 у send клиент уже повторил сам); для
+`deleteNotification` — `none` после встроенных повторов (дальше — следующий receive), кроме `pause`.
 
 **466 / `quotaExceeded` (§5.5).** `parseQuota466Body(body, method)` разбирает все три формата
 (`invokeStatus`, `correspondentsStatus`, тело-уведомление `quotaData`), `used/total` — number или string;
@@ -80,8 +97,12 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 уведомления из очереди (без `timestamp`). `description` (там чужие chatId) **не сохраняется** нигде — ни в
 `QuotaSummary`, ни в `message`, ни в логах; в лог идут только `method/used/total/status`.
 
-**Тексты для UI** (`messages.ts`): `describeError(err, 'login' | 'session' | 'checkAccount' | 'send')`,
-`QUOTA_TEXTS`, `quotaText()`, `stateInstanceText()`, `isLoginAllowed()`, `WEBHOOK_URL_SET_TEXT` — строки из §4.1–4.3, §5.5.
+**Тексты для UI** (`messages.ts`) — дословно из ТЗ v1.3.1, константы `LOGIN_FORM_TEXTS`, `AUTH_TEXTS`,
+`INSTANCE_TEXTS`, `BANNER_TEXTS`, `SETTINGS_TEXTS` (П-1…П-5), `CHECK_ACCOUNT_TEXTS`, `SEND_TEXTS`, `QUOTA_TEXTS`;
+функции `describeError(err, 'login' | 'session' | 'checkAccount' | 'send')`, `quotaText()`,
+`shouldShowQuotaBanner()` (только `chats`, ВА-13), `stateInstanceText()`, `isLoginAllowed()`, `unreachableText()`.
+`FALLBACK_TEXTS` — строки, которых в ТЗ нет (например, 429 у send после повторов). Тест `messages.test.ts`
+сверяет каждую строку с ТЗ посимвольно.
 
 ## Токен
 
@@ -94,7 +115,8 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 
 ## Чистые функции (для тестов и других модулей)
 
-`buildMethodUrl`, `buildMaskedUrl`, `normalizeApiUrl`, `validateCredentials` (url.ts); `maskToken`, `maskUrl`,
+`buildMethodUrl`, `buildMaskedUrl`, `normalizeApiUrl`, `validateApiUrl`, `validateCredentials` (url.ts);
+`parseRetryAfter`, `retryHintFor` (http.ts); `maskToken`, `maskUrl`,
 `redactSecret` (mask.ts); `parseQuota466Body`, `parseQuotaExceededNotification` (quota.ts); `normalizePhone`,
 `isNormalizedPhone`, `toCheckAccountPhone`, `PHONE_FORMAT_ERROR` (phone.ts, Р-10); `validateSendChatId`,
 `messageLength` (client.ts); тексты — messages.ts. Извлечение текста уведомления (§5.3) —
@@ -102,8 +124,9 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 
 ## Тесты и фикстуры
 
-`src/api/__tests__/`: `url`, `client`, `config`, `errors`, `quota`, `masking`, `messages`, `phone`
+`src/api/__tests__/`: `url`, `client`, `config`, `errors`, `quota`, `masking`, `messages`, `phone`, `retries`,
+`session`
 (+ `src/notifications/extractText.test.ts`). `fetch` — всегда мок, глобальный `fetch` в этих тестах бросает
-исключение (`blockRealNetwork()`). Фикстуры `__tests__/fixtures/notifications.ts` — обезличенные структуры
+исключение (`blockRealNetwork()`). Фикстуры `src/test/fixtures/notifications.ts` (общие для api, notifications, polling) — обезличенные структуры
 реальных уведомлений (все значения условные) + синтетические по документации (личное входящее, `quotaExceeded`,
 466 в трёх форматах); `satisfies ReceivedNotification` сверяет контракт `types.ts` с реальными данными.
