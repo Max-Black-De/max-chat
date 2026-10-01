@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build / test output
+dist/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+node_modules/.tmp/
+
+# env: только .env.example попадает в репозиторий (Д-8, НФТ-11)
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.local
