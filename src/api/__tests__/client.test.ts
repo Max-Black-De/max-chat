@@ -3,6 +3,7 @@ import { GreenApiError, GreenApiErrorCode } from '../errors';
 import { isCheckAccountChatId, messageLength } from '../client';
 import {
   channelImage,
+  deleteOk,
   groupQuotedWithPhone,
   incomingText,
   outgoingApi,
@@ -377,6 +378,19 @@ describe('deleteNotification (§5.2, §5.4)', () => {
       reason: '',
       alreadyDeleted: false,
     });
+  });
+
+  it.each([
+    ['точное тело сервера', '{"result":true,"reason":""}'],
+    ['фикстура QA deleteOk', JSON.stringify(deleteOk)],
+    ['без reason', '{"result":true}'],
+    ['reason непустой — не ошибка', '{"result":true,"reason":"ok"}'],
+  ])('result:true (%s) → успех, alreadyDeleted:false', async (_name, text) => {
+    const c = makeClient(mockFetch({ body: text }).fetch);
+    const r = await c.deleteNotification(1);
+    expect(r.result).toBe(true);
+    expect(r.alreadyDeleted).toBe(false);
+    expect(r.reason).toBe((JSON.parse(text) as { reason?: string }).reason ?? '');
   });
 
   it('result:false → считать удалённым', async () => {
