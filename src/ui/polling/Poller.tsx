@@ -11,6 +11,7 @@
  *    401/403 — сессию завершает контроллер, компонент размонтируется: abort и освобождение замка.
  * 3. Обработка body: `routeNotification` → `applyNotification` (слияние §6.3) / баннер квоты /
  *    игнор. В лог — только тип уведомления; номер, chatId, текст и токен не логируются (Р-5, Р-11).
+ *    Без `instanceData` проверка инстанса пропускается (Р-5, v1.3.7), в лог — тип с пометкой.
  */
 import { useEffect, useRef, useState } from 'react';
 import { routeNotification, type RoutedNotification } from '../../notifications';
@@ -56,6 +57,9 @@ export function Poller({ locks, sleep, warn = defaultWarn }: PollerProps) {
     handleRef.current = (body) => {
       if (!idInstance) return;
       const routed: RoutedNotification = routeNotification(body, { idInstance });
+      // Р-5 (v1.3.7): без instanceData проверка инстанса пропущена — в лог только тип.
+      if (routed.noInstanceData)
+        warn('Notification without instanceData', { type: routed.type, note: 'no instanceData' });
       switch (routed.kind) {
         case 'message': {
           const outcome = applyNotification(routed.message);

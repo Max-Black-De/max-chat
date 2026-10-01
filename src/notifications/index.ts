@@ -14,7 +14,7 @@
  * Покрытие тестами ≥ 80 % (НФТ-9, Д-2), фикстуры — с условными значениями (НФТ-11).
  */
 export { extractMessageText, type ExtractedText } from './extractText';
-export { isNotificationForInstance } from './instanceFilter';
+export { hasInstanceId, isNotificationForInstance } from './instanceFilter';
 export {
   notificationTypeForLog,
   routeNotification,

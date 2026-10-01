@@ -14,7 +14,7 @@
  */
 import { parseQuotaExceededNotification, type QuotaSummary } from '../api';
 import { extractMessageText } from './extractText';
-import { isNotificationForInstance } from './instanceFilter';
+import { hasInstanceId, isNotificationForInstance } from './instanceFilter';
 
 /** Откуда сообщение: входящее, отправлено с телефона, отправлено через API (§5.3). */
 export type RoutedMessageSource = 'incoming' | 'outgoingPhone' | 'outgoingApi';
@@ -47,10 +47,15 @@ export type IgnoreReason =
   /** Не объект, нет `senderData` / `chatId`, `idMessage` не строка, нет `timestamp` (EC-N7). */
   | 'malformed';
 
-export type RoutedNotification =
+/**
+ * `noInstanceData` — в body нет `instanceData.idInstance`: проверка инстанса пропущена (Р-5,
+ * v1.3.7), в лог — только тип с этой пометкой.
+ */
+export type RoutedNotification = (
   | { kind: 'message'; message: RoutedMessage; chatName?: string; type: string }
   | { kind: 'quota'; quota: QuotaSummary; type: 'quotaExceeded' }
-  | { kind: 'ignore'; reason: IgnoreReason; type: string };
+  | { kind: 'ignore'; reason: IgnoreReason; type: string }
+) & { noInstanceData?: true };
 
 export interface RouteContext {
   /** idInstance текущей сессии (строкой). */
@@ -82,10 +87,15 @@ export function routeNotification(body: unknown, ctx: RouteContext): RoutedNotif
   const type = notificationTypeForLog(body);
   if (!isRecord(body) || typeof body.typeWebhook !== 'string')
     return { kind: 'ignore', reason: 'malformed', type };
+  // Р-5 (v1.3.7): чужое — только при заданном и другом idInstance; без него — как обычно.
   if (!isNotificationForInstance(body, ctx.idInstance))
     return { kind: 'ignore', reason: 'foreignInstance', type };
+  const routed = routeOwn(body, type);
+  return hasInstanceId(body) ? routed : { ...routed, noInstanceData: true };
+}
 
-  const typeWebhook = body.typeWebhook;
+function routeOwn(body: Record<string, unknown>, type: string): RoutedNotification {
+  const typeWebhook = String(body.typeWebhook);
   if (typeWebhook === 'quotaExceeded') {
     const quota = parseQuotaExceededNotification(body) ?? { kind: 'chats', source: 'fallback' };
     return { kind: 'quota', quota, type: 'quotaExceeded' };

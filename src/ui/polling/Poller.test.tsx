@@ -42,6 +42,7 @@ import {
   unknownChatText,
   unknownTypeWebhooks,
   errorResponses,
+  quota466Cases,
 } from '../../test/fixtures';
 import { TEST_CHAT_ID, chatFixture, lsKey, storedChats } from '../../test/fixtures/chats';
 
@@ -318,6 +319,40 @@ describe('Poller: что не показывается (Р-5, Р-14, EC-N1…N10
       status: 'CORRESPONDENTS_QUOTA_EXCEEDED',
     });
     expect(JSON.stringify(tab.pollWarn.mock.calls)).not.toContain('description');
+  });
+});
+
+describe('Poller: квота из очереди (§5.5, ВА-13, Р-5 v1.3.7)', () => {
+  it('quotaExceeded без instanceData → баннер квоты и delete; в лог — тип с пометкой', async () => {
+    const noData: Record<string, unknown> = { ...quotaExceededNotification };
+    delete noData.instanceData;
+    const tab = openTab({ receive: [note(noData, 57)] });
+    await ready(tab);
+    await drained(tab, 2);
+    expect(tab.q.getByTestId('banner-quota')).toHaveTextContent(QUOTA_TEXTS.banner);
+    expect(deletes(tab.api)).toEqual([57]);
+    expect(tab.pollWarn).toHaveBeenCalledWith('Notification without instanceData', {
+      type: 'quotaExceeded',
+      note: 'no instanceData',
+    });
+    expectCleanLogs(tab.warn, tab.pollWarn);
+  });
+
+  it('закрытый баннер квоты: quotaExceeded и 466 на receive его не возвращают, опрос — с backoff', async () => {
+    const gate = deferred();
+    const tab = openTab({
+      receive: [note(quotaExceededNotification, 58), { deferred: gate }],
+    });
+    await ready(tab);
+    await tab.q.findByTestId('banner-quota');
+    fireEvent.click(tab.q.getByTestId('banner-quota-close'));
+    expect(tab.q.queryByTestId('banner-quota')).toBeNull();
+    tab.api.set('receiveNotification', [note(quotaExceededNotification, 59), HANG]);
+    gate.release(quota466Cases.correspondentsStatus.response);
+    await drained(tab, 4);
+    expect(tab.sleeps).toEqual([1000]);
+    expect(deletes(tab.api)).toEqual([58, 59]);
+    expect(tab.q.queryByTestId('banner-quota')).toBeNull();
   });
 });
 

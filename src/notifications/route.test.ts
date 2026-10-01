@@ -142,6 +142,26 @@ describe('routeNotification (§5.3)', () => {
     expect(route(ownInstanceAsString)).toMatchObject({ kind: 'message' });
   });
 
+  it('нет instanceData / idInstance → проверка пропущена, обработка как обычно, пометка (Р-5 v1.3.7)', () => {
+    const noData: Record<string, unknown> = { ...incomingText };
+    delete noData.instanceData;
+    expect(route(noData)).toMatchObject({
+      kind: 'message',
+      noInstanceData: true,
+      message: { chatId: CHAT_IDS.primary },
+    });
+    expect(
+      route({ ...incomingText, instanceData: { wid: incomingText.instanceData.wid } }),
+    ).toMatchObject({ kind: 'message', noInstanceData: true });
+    expect(route(incomingText)).not.toHaveProperty('noInstanceData');
+    expect(route({ typeWebhook: 'quotaExceeded' })).toEqual({
+      kind: 'quota',
+      type: 'quotaExceeded',
+      quota: { kind: 'chats', source: 'fallback' },
+      noInstanceData: true,
+    });
+  });
+
   it('статус и смена состояния → игнор (Р-14, EC-N10)', () => {
     expect(route(statusDelivered)).toMatchObject({ kind: 'ignore', reason: 'status' });
     expect(route(stateChangedAuthorized)).toMatchObject({ kind: 'ignore', reason: 'stateChanged' });
