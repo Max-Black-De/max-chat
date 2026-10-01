@@ -127,3 +127,52 @@ export function toFetchResult(reply: MockReply): Promise<Response> {
   }
   return Promise.resolve(toFetchResponse(reply));
 }
+
+/** Заголовки ответа, которые браузер отдаёт странице всегда (CORS-safelisted, Fetch §3.2). */
+const CORS_SAFELISTED_RESPONSE_HEADERS = new Set([
+  'cache-control',
+  'content-language',
+  'content-length',
+  'content-type',
+  'expires',
+  'last-modified',
+  'pragma',
+]);
+
+/**
+ * Как ответ видит код страницы при кросс-доменном запросе: кроме safelisted, видны только
+ * заголовки из `Access-Control-Expose-Headers`. Так `Retry-After` без Expose-Headers для
+ * приложения отсутствует (EC-T7, edge-cases §3 п. 3) — ветка «1 → 2 → 4 с».
+ */
+export function browserVisibleHeaders(mock: MockHttpResponse): Record<string, string> {
+  const exposeEntry = Object.entries(mock.headers).find(
+    ([name]) => name.toLowerCase() === 'access-control-expose-headers',
+  );
+  const exposed = new Set(
+    (exposeEntry?.[1] ?? '')
+      .split(',')
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  return Object.fromEntries(
+    Object.entries(mock.headers).filter(([name]) => {
+      const lower = name.toLowerCase();
+      return (
+        CORS_SAFELISTED_RESPONSE_HEADERS.has(lower) ||
+        exposed.has(lower) ||
+        lower.startsWith('access-control-')
+      );
+    }),
+  );
+}
+
+/**
+ * `toFetchResult` с фильтром заголовков как в браузере (`browserVisibleHeaders`): для тестов,
+ * где важно, виден ли приложению `Retry-After`. Сеть и ответ без ACAO → `TypeError`.
+ */
+export function toBrowserFetchResult(reply: MockReply): Promise<Response> {
+  if (isNetworkFailure(reply) || !hasCors(reply)) {
+    return Promise.reject(new TypeError('Failed to fetch'));
+  }
+  return Promise.resolve(toFetchResponse({ ...reply, headers: browserVisibleHeaders(reply) }));
+}

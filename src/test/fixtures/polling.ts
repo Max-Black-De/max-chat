@@ -136,3 +136,26 @@ export const pollingScenarios = {
   timerRule: timerRuleScenario,
   timerRuleAfterTimeout: timerRuleAfterTimeoutScenario,
 } as const satisfies Record<string, PollingScenario>;
+
+/**
+ * §6.1 п. 2.2 (v1.3.7): пустой ответ receive пришёл быстрее 1 с после отправки запроса
+ * (сервер не выдержал `receiveTimeout`) → перед следующим receive пауза 1 с, один таймер.
+ * Пустой ответ, пришедший через ≥ 1 с, — сразу следующий receive, без паузы.
+ */
+export const fastEmptyReceiveScenario = {
+  refs: ['§6.1 п. 2.2', 'R-04', 'EC-P17'],
+  receive: [
+    emptyReceiveResponses.emptyBody,
+    emptyReceiveResponses.emptyBody,
+    notificationResponse(receipt(incomingText, 66)),
+  ],
+  expected: {
+    deleteReceiptIds: [66],
+    receiveBackoffSec: [1, 1],
+    shownIdMessages: [incomingText.idMessage],
+    continuesPolling: true,
+  },
+} as const satisfies PollingScenario;
+
+/** Минимальная длительность «нормального» пустого ответа, мс (§6.1 п. 2.2). */
+export const FAST_EMPTY_RECEIVE_MS = 1000;

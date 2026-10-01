@@ -720,3 +720,72 @@ export const ownInstanceAsString: unknown = {
  * не показывается и `deleteNotification` для `receiptId` 77 не вызывается.
  */
 export const lateSessionNotification = receipt(incomingText, 77);
+
+// --- Д3 (Q2): образец Р-26 и уточнения ТЗ v1.3.6–v1.3.7 ---------------------------------
+
+/**
+ * Р-11 (v1.3.6): аналог маскированного образца QA `incoming-r26-masked.json` — входящее
+ * `imageMessage` в известный чат. Повторяет **структуру** образца (все поля `senderData`
+ * и `fileMessageData`, chatId только в `senderData`, `senderContactName` непустой),
+ * значения — только условные. Ожидание: заглушка «Сообщение этого типа не поддерживается»
+ * в пузыре и превью; caption, миниатюра, downloadUrl, имя файла и `senderPhoneNumber`
+ * не показываются, не хранятся и не логируются.
+ */
+export const incomingImageSampleR26 = incomingMessage({
+  idMessage: '100000000000000040',
+  timestamp: BASE_TIMESTAMP + 80,
+  // Номер отправителя намеренно ≠ номеру чата (тот законно лежит в кеше номер → chatId):
+  // так утечку `senderPhoneNumber` видно в хранилище и логах.
+  senderData: {
+    ...senderPrimary,
+    senderContactName: 'Тестовый Контакт',
+    senderPhoneNumber: PHONES.secondary,
+  },
+  messageData: {
+    typeMessage: 'imageMessage',
+    fileMessageData: {
+      downloadUrl: `${MEDIA_URL_BASE}/qa-sample-photo.jpg`,
+      caption: 'Тестовая подпись QA',
+      fileName: 'qa-sample-photo.jpg',
+      jpegThumbnail: 'cWEtdGh1bWI=',
+      isAnimated: false,
+      mimeType: 'image/jpeg',
+      forwardingScore: 1,
+      isForwarded: true,
+    },
+  },
+});
+
+/** Строки из `incomingImageSampleR26`, которых не должно быть в DOM, localStorage и логах. */
+export const incomingImageSampleLeaks = [
+  'Тестовая подпись QA',
+  'qa-sample-photo',
+  'cWEtdGh1bWI',
+  'media.example.test',
+  'Тестовый Контакт',
+  String(PHONES.secondary),
+] as const;
+
+/**
+ * Р-5 (v1.3.7): у уведомления нет `instanceData` — это **не** «чужое»: проверка инстанса
+ * пропускается, уведомление обрабатывается как обычно. Вне контракта типов (`unknown`).
+ */
+export const incomingWithoutInstanceData: unknown = Object.fromEntries(
+  Object.entries(
+    incomingMessage({
+      idMessage: '100000000000000041',
+      timestamp: BASE_TIMESTAMP + 81,
+      messageData: textMessageData('Тестовый ответ без instanceData'),
+    }),
+  ).filter(([key]) => key !== 'instanceData'),
+);
+
+/** Р-5 (v1.3.7): `instanceData` есть, но без `idInstance` — тоже не «чужое». */
+export const incomingWithoutIdInstance: unknown = {
+  ...incomingMessage({
+    idMessage: '100000000000000042',
+    timestamp: BASE_TIMESTAMP + 82,
+    messageData: textMessageData('Тестовый ответ без idInstance'),
+  }),
+  instanceData: { wid: OWN_WID, typeInstance: 'v3' },
+};
