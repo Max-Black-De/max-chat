@@ -1,22 +1,32 @@
 /**
  * polling/ — фоновый цикл receive → handle → delete (задача F5, ТЗ §6.1, Р-12, Р-20).
  *
- * Будет содержать:
- * - захват Web Lock `maxchat-poll-<idInstance>`; не захвачен → баннер «Чат открыт в другой
- *   вкладке», опрос не запускается;
- * - строго один receiveNotification в полёте (`receiveTimeout=20`, AbortController 30 с);
- * - delete после каждого уведомления, даже если обработчик бросил исключение;
- * - backoff 1 → 2 → 4 → … → 30 с при сети / 429 / 5xx; пауза 30 с при «instance is starting»;
- *   остановка при 401 и при заданном webhookUrl (П-1);
- * - остановка по выходу / размонтированию: abort() и освобождение lock.
+ * - `runPollLoop` — строго один receiveNotification в полёте (`receiveTimeout=20`, таймаут
+ *   запроса 30 с — в клиенте F1); delete после каждого уведомления, даже если обработчик бросил
+ *   исключение; backoff 1 → 2 → 4 → … → 30 с при сети / 429 / 5xx; пауза 30 с при
+ *   «instance is starting»; остановка при 401/403 и при заданном webhookUrl (П-1); отмена по
+ *   выходу / размонтированию, поздние ответы не обрабатываются и не удаляются (EC-S7, EC-P16);
+ * - `holdPollLock` — Web Lock `maxchat-poll-<idInstance>`: занят → вкладка только на чтение и
+ *   ждёт замок, затем опрашивает сама (Р-12, ВА-16, EC-S4);
+ * - `abortableSleep` — пауза одним таймером после завершения запроса (EC-P17).
+ *
+ * React-обвязка — `src/ui/polling/Poller.tsx`.
  */
-
-/** Префикс имени Web Lock опроса (Р-12): `${POLL_LOCK_PREFIX}${idInstance}`. */
-export const POLL_LOCK_PREFIX = 'maxchat-poll-';
-
-/** Экспоненциальная пауза при ошибках опроса: от 1 с до 30 с (Р-20). */
-export const BACKOFF_INITIAL_MS = 1_000;
-export const BACKOFF_MAX_MS = 30_000;
-
-/** Пауза опроса при `instance is starting or not authorized` (§5.4). */
-export const NOT_AUTHORIZED_PAUSE_MS = 30_000;
+export {
+  POLL_LOCK_PREFIX,
+  BACKOFF_INITIAL_MS,
+  BACKOFF_MAX_MS,
+  NOT_AUTHORIZED_PAUSE_MS,
+} from './constants';
+export {
+  abortableSleep,
+  backoffDelay,
+  classifyReceiveError,
+  runPollLoop,
+  type PollLoopOptions,
+  type PollSleep,
+  type PollStopReason,
+  type PollWarn,
+  type ReceiveErrorAction,
+} from './loop';
+export { holdPollLock, pollLockName, type LockManagerLike, type PollLockCallbacks } from './lock';
