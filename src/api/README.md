@@ -71,30 +71,32 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 известной причиной разбирается по `reason` (ВА-11); expired/deleted проверяются раньше «not authorized».
 `retry`: `backoff` (1→2→4…30 с), `pause` (30 с), `none`.
 
-| code                                       | Когда                                                             | retry           |
-| ------------------------------------------ | ----------------------------------------------------------------- | --------------- |
-| `NETWORK`                                  | fetch упал (сеть, DNS, CORS)                                      | backoff*        |
-| `TIMEOUT`                                  | нет ответа за `timeoutMs`                                         | backoff*        |
-| `ABORTED`                                  | отменён внешним `AbortSignal`                                     | none            |
-| `SESSION_CLOSED`                           | клиент закрыт `close()`, ответ старой сессии отброшен             | none            |
-| `INVALID_JSON` / `UNEXPECTED_RESPONSE`     | 2xx, но не JSON / не та структура                                 | backoff*        |
-| `UNAUTHORIZED`                             | 401                                                               | none            |
-| `FORBIDDEN` / `ACCOUNT_SUSPENDED`          | 403 / 403 `Your account is suspended`                             | none            |
-| `INSTANCE_NOT_READY`                       | 400 или `{status:false}` «instance is starting or not authorized» | pause*          |
-| `INSTANCE_EXPIRED` / `INSTANCE_DELETED`    | 400 «account is expired» / «Instance is deleted» (сессия)         | none            |
-| `WEBHOOK_URL_SET`                          | 400 «custom webhook url is set» (П-1)                             | none            |
-| `BAD_REQUEST`                              | прочие 400 (`Validation failed…`) — `reason` можно показать       | none            |
-| `NOT_FOUND`                                | 404                                                               | none            |
-| `RATE_LIMITED`                             | 429                                                               | backoff*        |
-| `QUOTA_EXCEEDED`                           | 466 → `GreenApiQuotaError`                                        | **none всегда** |
-| `CHECK_LIMIT`                              | 469, «User get contact info limit reached»                        | none            |
-| `CHECK_TIMEOUT`                            | 400 «check phone number timeout limit exceeded» (ВА-10)           | none            |
-| `SERVER`                                   | 499, 5xx                                                          | backoff*        |
-| `HTTP`                                     | прочие коды                                                       | none            |
-| `INVALID_ARGUMENT` / `CHAT_ID_NOT_ALLOWED` | проверка на клиенте, запрос не отправлялся                        | none            |
+| code                                       | Когда                                                             | retry    |
+| ------------------------------------------ | ----------------------------------------------------------------- | -------- |
+| `NETWORK`                                  | fetch упал (сеть, DNS, CORS)                                      | backoff* |
+| `TIMEOUT`                                  | нет ответа за `timeoutMs`                                         | backoff* |
+| `ABORTED`                                  | отменён внешним `AbortSignal`                                     | none     |
+| `SESSION_CLOSED`                           | клиент закрыт `close()`, ответ старой сессии отброшен             | none     |
+| `INVALID_JSON` / `UNEXPECTED_RESPONSE`     | 2xx, но не JSON / не та структура                                 | backoff* |
+| `UNAUTHORIZED`                             | 401                                                               | none     |
+| `FORBIDDEN` / `ACCOUNT_SUSPENDED`          | 403 / 403 `Your account is suspended`                             | none     |
+| `INSTANCE_NOT_READY`                       | 400 или `{status:false}` «instance is starting or not authorized» | pause*   |
+| `INSTANCE_EXPIRED` / `INSTANCE_DELETED`    | 400 «account is expired» / «Instance is deleted» (сессия)         | none     |
+| `WEBHOOK_URL_SET`                          | 400 «custom webhook url is set» (П-1)                             | none     |
+| `BAD_REQUEST`                              | прочие 400 (`Validation failed…`) — `reason` можно показать       | none     |
+| `NOT_FOUND`                                | 404                                                               | none     |
+| `RATE_LIMITED`                             | 429                                                               | backoff* |
+| `QUOTA_EXCEEDED`                           | 466 → `GreenApiQuotaError`                                        | none*    |
+| `CHECK_LIMIT`                              | 469, «User get contact info limit reached»                        | none     |
+| `CHECK_TIMEOUT`                            | 400 «check phone number timeout limit exceeded» (ВА-10)           | none     |
+| `SERVER`                                   | 499, 5xx                                                          | backoff* |
+| `HTTP`                                     | прочие коды                                                       | none     |
+| `INVALID_ARGUMENT` / `CHAT_ID_NOT_ALLOWED` | проверка на клиенте, запрос не отправлялся                        | none     |
 
 \* для `sendMessage` и `checkAccount` — всегда `none` (ВА-7, ВА-8: 429 у send клиент уже повторил сам); для
 `deleteNotification` — `none` после встроенных повторов (дальше — следующий receive), кроме `pause`.
+Для `receiveNotification` **любая** ошибка, кроме «сессия невалидна», `WEBHOOK_URL_SET` (П-1), `pause` и
+отмены/`close()`, — `backoff`, в том числе 404, прочие 400, 466, 469 и неизвестные коды (НФТ-5, §6.1 п. 2.4).
 
 **466 / `quotaExceeded` (§5.5).** `parseQuota466Body(body, method)` разбирает все три формата
 (`invokeStatus`, `correspondentsStatus`, тело-уведомление `quotaData`), `used/total` — number или string;

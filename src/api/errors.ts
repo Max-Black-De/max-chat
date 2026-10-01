@@ -175,15 +175,22 @@ export function createGreenApiError(init: GreenApiErrorInit): GreenApiError {
     : new GreenApiError(init);
 }
 
-/** 466: квота тарифа Developer (§5.5). Автоповтора нет никогда. */
+/** 466: квота тарифа Developer (§5.5). У sendMessage и checkAccount автоповтора нет никогда. */
 export class GreenApiQuotaError extends GreenApiError {
   override readonly name: string = 'GreenApiQuotaError';
   readonly quota: QuotaSummary;
 
-  constructor(init: Omit<GreenApiErrorInit, 'code' | 'retry' | 'reason'>, quota: QuotaSummary) {
+  /**
+   * `retry` по умолчанию `none`: у sendMessage и checkAccount автоповтора нет никогда (§5.5).
+   * Для receiveNotification транспорт передаёт `backoff` (НФТ-5).
+   */
+  constructor(
+    init: Omit<GreenApiErrorInit, 'code' | 'retry' | 'reason'> & { retry?: RetryHint },
+    quota: QuotaSummary,
+  ) {
     // description из тела 466 содержит чужие chatId — в reason не кладём (§5.5).
     const reason = `quota=${quota.kind} method=${quota.method ?? '?'} used=${quota.used ?? '?'} total=${quota.total ?? '?'}`;
-    super({ ...init, code: GreenApiErrorCode.QUOTA_EXCEEDED, retry: 'none', reason });
+    super({ ...init, code: GreenApiErrorCode.QUOTA_EXCEEDED, retry: init.retry ?? 'none', reason });
     this.quota = quota;
   }
 

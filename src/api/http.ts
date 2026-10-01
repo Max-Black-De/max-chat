@@ -2,6 +2,7 @@ import {
   GreenApiErrorCode,
   GreenApiQuotaError,
   createGreenApiError,
+  isSessionInvalidCode,
   type GreenApiError,
   type RetryHint,
 } from './errors';
@@ -41,20 +42,35 @@ export interface TransportResponse {
 }
 
 /**
- * Рекомендация повтора для вызывающего кода (§5.4, ВА-7, ВА-8, ВА-17):
+ * Рекомендация повтора для вызывающего кода (§5.4, §6.1 п. 2.4, НФТ-5, ВА-7, ВА-8, ВА-17):
+ * - отмена (`ABORTED`, `SESSION_CLOSED`), «сессия невалидна» (401/403/expired/deleted) и
+ *   проверки на клиенте — `none` для всех методов;
  * - sendMessage, checkAccount — никогда (`none`): 429 у sendMessage клиент уже повторил сам;
- * - deleteNotification — встроенные повторы уже сделаны, дальше — следующий receive (`none`),
- *   кроме «инстанс не готов» (`pause`);
- * - остальные (receive, getStateInstance, getSettings): сеть / таймаут / 429 / 499 / 5xx / битый
- *   ответ — `backoff`, «инстанс не готов» — `pause`.
+ * - «инстанс не готов» — `pause` (30 с), WEBHOOK_URL_SET (П-1) — `none` (опрос стоит до «Проверить снова»);
+ * - deleteNotification — встроенные повторы уже сделаны, дальше — следующий receive (`none`);
+ * - receiveNotification — **любая** прочая ошибка (404, прочие 400, 466, 469, неизвестные коды,
+ *   сеть, 5xx, битый ответ) — `backoff`: опрос не должен тихо умирать (НФТ-5);
+ * - getStateInstance, getSettings: сеть / таймаут / 429 / 499 / 5xx / битый ответ — `backoff`,
+ *   прочее — `none`.
  */
 export function retryHintFor(
   code: GreenApiErrorCode,
   method: GreenApiMethod | 'client',
 ): RetryHint {
   if (method === 'sendMessage' || method === 'checkAccount' || method === 'client') return 'none';
-  if (code === GreenApiErrorCode.INSTANCE_NOT_READY) return 'pause';
+  switch (code) {
+    case GreenApiErrorCode.ABORTED:
+    case GreenApiErrorCode.SESSION_CLOSED:
+    case GreenApiErrorCode.INVALID_ARGUMENT:
+    case GreenApiErrorCode.CHAT_ID_NOT_ALLOWED:
+    case GreenApiErrorCode.WEBHOOK_URL_SET:
+      return 'none';
+    case GreenApiErrorCode.INSTANCE_NOT_READY:
+      return 'pause';
+  }
+  if (isSessionInvalidCode(code, method)) return 'none';
   if (method === 'deleteNotification') return 'none';
+  if (method === 'receiveNotification') return 'backoff';
   switch (code) {
     case GreenApiErrorCode.RATE_LIMITED:
     case GreenApiErrorCode.NETWORK:
@@ -247,7 +263,14 @@ export function httpError(
       quota: { ...quota },
     });
     return new GreenApiQuotaError(
-      { method: req.method, httpStatus: 466, maskedUrl: req.maskedUrl, apiUrl: ctx.apiUrl },
+      {
+        method: req.method,
+        httpStatus: 466,
+        maskedUrl: req.maskedUrl,
+        apiUrl: ctx.apiUrl,
+        // send/checkAccount — без автоповтора (§5.5); receive — backoff, опрос не умирает (НФТ-5).
+        retry: retryHintFor(GreenApiErrorCode.QUOTA_EXCEEDED, req.method),
+      },
       quota,
     );
   }

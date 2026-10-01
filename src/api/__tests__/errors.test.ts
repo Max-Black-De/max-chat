@@ -5,7 +5,7 @@ import {
   isSessionInvalidError,
   type GreenApiErrorCode,
 } from '../errors';
-import { classifyReason } from '../http';
+import { classifyReason, retryHintFor } from '../http';
 import type { GreenApiClient } from '../client';
 import {
   catchError,
@@ -340,6 +340,69 @@ describe('рекомендации повтора (retry)', () => {
         'none',
       );
     }
+  });
+
+  it('receiveNotification: любая ошибка, кроме невалидной сессии и П-1, → backoff (НФТ-5, §6.1 п. 2.4)', async () => {
+    const call = method('receiveNotification');
+    for (const reply of [
+      { status: 404 },
+      { status: 400, body: 'Validation failed' },
+      { status: 400, body: '' },
+      { status: 405 },
+      { status: 418 },
+      { status: 466, body: { correspondentsStatus: { method: 'correspondents' } } },
+      { status: 469 },
+      { status: 200, body: 'not json' },
+      { status: 200, body: { status: false, reason: 'something new' } },
+      { status: 200, body: { receiptId: 'x' } },
+      { status: 302 },
+    ] satisfies MockReply[]) {
+      const e = await errorOf(reply, call);
+      expect(e.retry, JSON.stringify(reply)).toBe('backoff');
+    }
+    for (const reply of [
+      { status: 401 },
+      { status: 403 },
+      { status: 403, body: 'Your account is suspended' },
+      { status: 400, body: 'Instance account is expired' },
+      { status: 400, body: 'Instance is deleted' },
+      { status: 400, body: 'custom webhook url is set' },
+    ] satisfies MockReply[]) {
+      expect((await errorOf(reply, call)).retry, JSON.stringify(reply)).toBe('none');
+    }
+    expect(
+      (await errorOf({ status: 400, body: 'instance is starting or not authorized' }, call)).retry,
+    ).toBe('pause');
+  });
+
+  it('receiveNotification: отмена и закрытие клиента → none (опрос остановлен намеренно)', async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const e = await errorOf({ body: '' }, (c) => c.receiveNotification({ signal: ac.signal }));
+    expect(e.code).toBe(C.ABORTED);
+    expect(e.retry).toBe('none');
+    const c = makeClient(mockFetch({ body: '' }).fetch);
+    c.close();
+    const closed = await catchError(c.receiveNotification());
+    expect(closed).toBeInstanceOf(GreenApiError);
+    expect((closed as GreenApiError).retry).toBe('none');
+  });
+
+  it('retryHintFor: таблица для receive и getStateInstance', () => {
+    expect(retryHintFor(C.NOT_FOUND, 'receiveNotification')).toBe('backoff');
+    expect(retryHintFor(C.BAD_REQUEST, 'receiveNotification')).toBe('backoff');
+    expect(retryHintFor(C.HTTP, 'receiveNotification')).toBe('backoff');
+    expect(retryHintFor(C.QUOTA_EXCEEDED, 'receiveNotification')).toBe('backoff');
+    expect(retryHintFor(C.CHECK_LIMIT, 'receiveNotification')).toBe('backoff');
+    expect(retryHintFor(C.UNAUTHORIZED, 'receiveNotification')).toBe('none');
+    expect(retryHintFor(C.ACCOUNT_SUSPENDED, 'receiveNotification')).toBe('none');
+    expect(retryHintFor(C.WEBHOOK_URL_SET, 'receiveNotification')).toBe('none');
+    expect(retryHintFor(C.ABORTED, 'receiveNotification')).toBe('none');
+    expect(retryHintFor(C.SESSION_CLOSED, 'receiveNotification')).toBe('none');
+    expect(retryHintFor(C.INSTANCE_NOT_READY, 'receiveNotification')).toBe('pause');
+    expect(retryHintFor(C.NOT_FOUND, 'getStateInstance')).toBe('none');
+    expect(retryHintFor(C.QUOTA_EXCEEDED, 'sendMessage')).toBe('none');
+    expect(retryHintFor(C.QUOTA_EXCEEDED, 'checkAccount')).toBe('none');
   });
 
   it('deleteNotification: после встроенных повторов — none (дальше следующий receive, ВА-17); не авторизован → pause', async () => {
