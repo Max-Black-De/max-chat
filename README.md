@@ -72,6 +72,8 @@ Env-переменные необязательны — см. `.env.example` (`V
 | `npm test`              | Vitest (jsdom + Testing Library), один прогон    |
 | `npm run test:watch`    | Vitest в режиме наблюдения                       |
 | `npm run test:coverage` | Vitest с покрытием (v8)                          |
+| `npm run e2e`           | Playwright на моках (Chromium headless)          |
+| `npm run e2e:report`    | HTML-отчёт последнего прогона e2e                |
 
 ## Структура
 
@@ -85,12 +87,14 @@ src/
 ├── store/           # сессия (sessionStorage), чаты/сообщения/кеш (localStorage), дедуп (F2–F5)
 ├── ui/              # React-компоненты и стили (F2–F6)
 ├── test/setup.ts    # настройка Vitest (jest-dom)
+├── test/fixtures/   # условные фикстуры GREEN-API для Vitest и Playwright (Q2)
 ├── config.ts        # необязательная конфигурация из env Vite
 └── main.tsx         # точка входа
 plugins/             # Vite: base из BASE_PATH, CSP-meta в продакшен-сборке (Д-1)
 scripts/
 ├── verify-dist.ts   # проверка собранного dist/index.html (CSP, инлайн, base)
 └── check-leaks.sh   # pre-push: поиск реальных данных по шаблонам вне репозитория
+e2e/                 # Playwright на моках (Д-2); support/greenApi.ts — моки и сетевая страховка
 ```
 
 ## Разработка
@@ -152,6 +156,18 @@ gitleaks git --config .gitleaks.toml --redact --log-opts="--all" .
 для этого локальный хук `pre-push` со списком шаблонов вне репозитория; без списка он ничего не
 проверяет и пуш не блокирует. Настройка — в [CONTRIBUTING.md](CONTRIBUTING.md#хук-pre-push-реальные-данные-нфт-11).
 
+### e2e (Playwright, Д-2)
+
+```bash
+npx playwright install chromium   # один раз; в Linux при нехватке библиотек — с --with-deps
+npm run e2e
+```
+
+Тесты в `e2e/`, конфиг — `playwright.config.ts`. Приложение поднимается Vite dev-сервером на порту
+5179 (`E2E_PORT`). Все запросы к GREEN-API перехватываются моками на фикстурах `src/test/fixtures/`.
+Любой запрос не на localhost и любой незамоканный метод GREEN-API обрывается и **валит тест**
+(`e2e/network-guard.spec.ts`) — реальный API и токен в e2e не используются.
+
 ## Краевые случаи
 
 Полная спецификация (105 случаев: ожидаемое поведение, модуль-владелец, задача, как тестировать) —
@@ -172,7 +188,7 @@ gitleaks git --config .gitleaks.toml --redact --log-opts="--all" .
 | 11  | Старые уведомления (до 24 ч) при входе                               | обрабатываются как обычные                                                                                  | R-12                   |
 | 12  | Порядок очереди не совпадает с `timestamp`                           | сортировка по `timestamp`, при равенстве — по порядку поступления                                           | V-21                   |
 
-ID тестов — из чек-листа QA (Q1). Unit- и e2e-тесты появятся в задачах F1–F5 и Q2 / Д-2.
+ID тестов — из чек-листа QA (Q1). Unit- и e2e-тесты сценариев появятся в задачах F1–F6 и Q2; инфраструктура e2e (Д-2) и фикстуры уже есть.
 
 ## Решения и компромиссы
 

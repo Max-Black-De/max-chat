@@ -1,5 +1,5 @@
-/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
+import { configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { resolveBasePath } from './plugins/base-path.ts';
 import { cspMetaPlugin } from './plugins/csp.ts';
@@ -19,13 +19,15 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'plugins/**/*.test.ts', 'scripts/**/*.test.ts'],
+    // e2e/ — Playwright (`npm run e2e`), не Vitest.
+    exclude: [...configDefaults.exclude, 'e2e/**'],
     restoreMocks: true,
     unstubEnvs: true,
     unstubGlobals: true,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx', 'src/**/*.d.ts'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'e2e/**', 'src/main.tsx', 'src/**/*.d.ts'],
       // НФТ-9: покрытие модулей нормализации, разбора уведомлений, дедупа и reducer ≥ 80 %.
       // Пороги включаются, когда появится логика (F3, F5, Q2).
     },

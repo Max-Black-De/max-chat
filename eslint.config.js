@@ -7,7 +7,14 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-  globalIgnores(['dist', 'coverage', 'node_modules']),
+  globalIgnores([
+    'dist',
+    'coverage',
+    'node_modules',
+    'test-results',
+    'playwright-report',
+    'blob-report',
+  ]),
 
   // Исходники приложения и тесты (TypeScript, правила с учётом типов).
   {
@@ -55,6 +62,20 @@ export default defineConfig([
   {
     files: ['scripts/**/*.ts'],
     rules: { 'no-console': 'off' },
+  },
+
+  // e2e на Playwright (Д-2) и конфиги инструментов на TS: код выполняется в Node,
+  // а колбэки page.evaluate — в браузере. React-правила к ним не относятся
+  // (`use` фикстур Playwright — не React-хук).
+  {
+    files: ['e2e/**/*.ts', 'playwright.config.ts', 'vite.config.ts'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'react-refresh/only-export-components': 'off',
+    },
   },
 
   // Конфиги инструментов (JS, Node).

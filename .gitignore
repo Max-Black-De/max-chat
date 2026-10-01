@@ -5,6 +5,12 @@ node_modules/
 dist/
 dist-ssr/
 coverage/
+
+# Playwright (Д-2)
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 *.tsbuildinfo
 node_modules/.tmp/
 
