@@ -20,5 +20,7 @@ export * from './texts';
 export * from './chats';
 export * from './chatsStorage';
 export * from './messagesStorage';
+export * from './messages';
+export * from './sendFlow';
 export * from './newChat';
 export * from './phoneFormat';
