@@ -1,13 +1,16 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { resolveBasePath } from './plugins/base-path.ts';
+import { cspMetaPlugin } from './plugins/csp.ts';
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  // Д-1 (деплой на GitHub Pages, позже): base должен совпадать с путём репозитория,
-  // например BASE_PATH=/max-chat/ в CI. Локально и на Vercel — '/'.
-  base: process.env.BASE_PATH ?? '/',
+  // cspMetaPlugin — только в `vite build` (Д-1, EC-X3); в dev CSP ломает HMR.
+  plugins: [react(), cspMetaPlugin()],
+  // Д-1: GitHub Pages отдаёт проект по подпути — CI собирает с BASE_PATH=/<repo>/.
+  // Без переменной — '/': dev, e2e и локальный preview работают от корня.
+  base: resolveBasePath(process.env.BASE_PATH),
   server: {
     port: 5173,
     strictPort: true,
@@ -15,7 +18,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'plugins/**/*.test.ts'],
     restoreMocks: true,
     unstubEnvs: true,
     unstubGlobals: true,
