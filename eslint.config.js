@@ -54,6 +54,32 @@ export default defineConfig([
     },
   },
 
+  // Слои каркаса: api/ — нижний слой (чистый TS-клиент), он не знает о store/ui/polling.
+  {
+    files: ['src/api/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/store',
+                '**/store/**',
+                '**/ui',
+                '**/ui/**',
+                '**/polling',
+                '**/polling/**',
+              ],
+              message:
+                'src/api — нижний слой: импорт из store/, ui/ и polling/ запрещён (зависимости идут сверху вниз).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Скрипты сборки и Vite-плагины выполняются в Node, не в браузере.
   {
     files: ['scripts/**/*.ts', 'plugins/**/*.ts'],
