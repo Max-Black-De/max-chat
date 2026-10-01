@@ -5,8 +5,12 @@ import {
   PREVIEW_MAX_CODE_POINTS,
   avatarInitial,
   avatarTone,
+  dayKey,
+  formatDayLabel,
   previewText,
+  withDaySeparators,
 } from './format';
+import { sortMessages, type StoredMessage } from '../store';
 
 /** Есть ли одиночная суррогатная половина (разорванная пара). */
 function hasLoneSurrogate(s: string): boolean {
@@ -59,5 +63,66 @@ describe('аватар', () => {
       expect(tone).toBeGreaterThanOrEqual(0);
       expect(tone).toBeLessThan(AVATAR_TONES);
     }
+  });
+});
+
+/** Секунды для местного времени браузера: тесты не зависят от TZ окружения. */
+const at = (y: number, m: number, d: number, h = 12, min = 0, sec = 0) =>
+  new Date(y, m - 1, d, h, min, sec).getTime() / 1000;
+const nowAt = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h).getTime();
+
+describe('разделители дат (Д-6b)', () => {
+  const now = nowAt(2026, 10, 1, 9);
+
+  it('«Сегодня», «Вчера», «12 сентября», с годом — если год не текущий', () => {
+    expect(formatDayLabel(at(2026, 10, 1, 0, 0, 0), now)).toBe('Сегодня');
+    expect(formatDayLabel(at(2026, 10, 1, 23, 59, 59), now)).toBe('Сегодня');
+    expect(formatDayLabel(at(2026, 9, 30, 23, 59, 59), now)).toBe('Вчера');
+    expect(formatDayLabel(at(2026, 9, 30, 0, 0, 0), now)).toBe('Вчера');
+    expect(formatDayLabel(at(2026, 9, 29, 23, 59), now)).toBe('29 сентября');
+    expect(formatDayLabel(at(2026, 9, 12), now)).toBe('12 сентября');
+    expect(formatDayLabel(at(2026, 5, 1), now)).toBe('1 мая');
+    expect(formatDayLabel(at(2025, 9, 12), now)).toBe('12 сентября 2025');
+  });
+
+  it('«Вчера» — по календарю: 1 января после полуночи → 31 декабря прошлого года', () => {
+    const newYear = new Date(2027, 0, 1, 0, 30).getTime();
+    expect(formatDayLabel(at(2026, 12, 31, 23, 50), newYear)).toBe('Вчера');
+    expect(formatDayLabel(at(2026, 12, 30, 10), newYear)).toBe('30 декабря 2026');
+    expect(formatDayLabel(at(2027, 1, 1, 0, 10), newYear)).toBe('Сегодня');
+  });
+
+  it('битый timestamp — без подписи и без разделителя', () => {
+    expect(formatDayLabel(Number.NaN, now)).toBe('');
+    expect(dayKey(Number.NaN)).toBe('');
+    expect(withDaySeparators([{ timestamp: Number.NaN }])).toEqual([
+      { kind: 'message', message: { timestamp: Number.NaN } },
+    ]);
+  });
+
+  it('граница суток: разделитель перед первым сообщением каждого дня, после сортировки §6.2', () => {
+    const m = (localId: string, timestamp: number): StoredMessage => ({
+      localId,
+      chatId: '10000000',
+      direction: 'in',
+      text: localId,
+      timestamp,
+    });
+    // Порядок поступления не совпадает с timestamp (EC-O2).
+    const shuffled = [
+      m('d2-a', at(2026, 10, 1, 0, 0, 0)),
+      m('d1-b', at(2026, 9, 30, 23, 59, 59)),
+      m('d1-a', at(2026, 9, 30, 8)),
+      m('d2-b', at(2026, 10, 1, 0, 0, 1)),
+    ];
+    const items = withDaySeparators(sortMessages(shuffled));
+    expect(items.map((i) => (i.kind === 'day' ? `day:${i.key}` : i.message.localId))).toEqual([
+      'day:2026-09-30',
+      'd1-a',
+      'd1-b',
+      'day:2026-10-01',
+      'd2-a',
+      'd2-b',
+    ]);
   });
 });

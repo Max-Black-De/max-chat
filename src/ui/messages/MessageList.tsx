@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { selectCanWrite, sortMessages, type StoredMessage } from '../../store';
+import { formatDayLabel, withDaySeparators } from '../format';
 import { useSession } from '../session/sessionContext';
 import { UI_TEXTS } from '../texts';
 import { MessageBubble } from './MessageBubble';
@@ -7,8 +8,9 @@ import { useMessages } from './messagesContext';
 import { decideScroll, isAtBottom } from './scroll';
 
 /**
- * Лента выбранного чата (§4.0 п. 2): сортировка по `timestamp` (§6.2), автопрокрутка к новому
- * сообщению, если пользователь был внизу, иначе кнопка «↓ новые сообщения» (п. 5.6).
+ * Лента выбранного чата (§4.0 п. 2): сортировка по `timestamp` (§6.2), разделители дат перед
+ * первым сообщением каждого дня (Д-6b), автопрокрутка к новому сообщению, если пользователь был
+ * внизу, иначе кнопка «↓ новые сообщения» (п. 5.6).
  * Монтируется на чат (`key` = chatId): при открытии чата лента прокручена вниз.
  */
 export function MessageList({ chatId }: { chatId: string }) {
@@ -22,6 +24,7 @@ export function MessageList({ chatId }: { chatId: string }) {
 
   const { messages } = getChatMessages(chatId);
   const sorted = useMemo(() => sortMessages(messages), [messages]);
+  const items = useMemo(() => withDaySeparators(sorted), [sorted]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -84,9 +87,22 @@ export function MessageList({ chatId }: { chatId: string }) {
           </p>
         ) : (
           <ol className="message-list__items">
-            {sorted.map((m) => (
-              <MessageBubble key={m.localId} message={m} canRetry={canWrite} onRetry={onRetry} />
-            ))}
+            {items.map((item) =>
+              item.kind === 'day' ? (
+                <li key={`day-${item.key}`} className="date-separator" data-testid="date-separator">
+                  <time className="date-separator__label" dateTime={item.key}>
+                    {formatDayLabel(item.timestamp)}
+                  </time>
+                </li>
+              ) : (
+                <MessageBubble
+                  key={item.message.localId}
+                  message={item.message}
+                  canRetry={canWrite}
+                  onRetry={onRetry}
+                />
+              ),
+            )}
           </ol>
         )}
       </div>

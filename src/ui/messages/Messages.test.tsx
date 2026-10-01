@@ -273,6 +273,33 @@ describe('лента (§4.0 п. 2, Р-11, Р-16, EC-U4, EC-U5, EC-O1)', () => {
   });
 });
 
+describe('разделители дат (Д-6b)', () => {
+  it('перед первым сообщением каждого дня; разделитель не входит в пузыри', async () => {
+    const day1 = new Date(2026, 8, 20, 23, 59).getTime() / 1000;
+    const day2 = new Date(2026, 8, 21, 0, 1).getTime() / 1000;
+    const local = memoryStorage({
+      ...twoChats(),
+      ...storedMessages([
+        msg({ localId: 'b', idMessage: 'B', timestamp: day2 }),
+        msg({ localId: 'a', idMessage: 'A', timestamp: day1 }),
+        msg({ localId: 'c', idMessage: 'C', timestamp: day2 + 60 }),
+      ]),
+    });
+    await openMain({ local });
+    const list = screen.getByTestId('message-list');
+    const rows = Array.from(list.querySelectorAll('ol > li')).map((li) =>
+      li.getAttribute('data-testid') === 'date-separator'
+        ? `sep:${li.querySelector('time')?.getAttribute('datetime') ?? ''}`
+        : li.getAttribute('data-local-id'),
+    );
+    expect(rows).toEqual(['sep:2026-09-20', 'a', 'sep:2026-09-21', 'b', 'c']);
+    expect(bubbles()).toHaveLength(3);
+    const [first] = screen.getAllByTestId('date-separator');
+    expect(first).toHaveTextContent(/^\d{1,2} сентября( 2026)?$|^Сегодня$|^Вчера$/);
+    expect(first).not.toHaveAttribute('dir');
+  });
+});
+
 describe('поле ввода (п. 3.1, п. 3.5, EC-U1, EC-U2, EC-U6)', () => {
   it('Р-28: видимый плейсхолдер «Сообщение», aria-label «Текст сообщения»', async () => {
     await openMain();
