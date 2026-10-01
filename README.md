@@ -89,7 +89,8 @@ src/
 └── main.tsx         # точка входа
 plugins/             # Vite: base из BASE_PATH, CSP-meta в продакшен-сборке (Д-1)
 scripts/
-└── verify-dist.ts   # проверка собранного dist/index.html (CSP, инлайн, base)
+├── verify-dist.ts   # проверка собранного dist/index.html (CSP, инлайн, base)
+└── check-leaks.sh   # pre-push: поиск реальных данных по шаблонам вне репозитория
 ```
 
 ## Разработка
@@ -146,6 +147,10 @@ unset BASE_PATH
 ```bash
 gitleaks git --config .gitleaks.toml --redact --log-opts="--all" .
 ```
+
+Реальные `idInstance`, `chatId` и номера gitleaks не ищет (их нельзя записать в публичный конфиг) —
+для этого локальный хук `pre-push` со списком шаблонов вне репозитория; без списка он ничего не
+проверяет и пуш не блокирует. Настройка — в [CONTRIBUTING.md](CONTRIBUTING.md#хук-pre-push-реальные-данные-нфт-11).
 
 ## Краевые случаи
 

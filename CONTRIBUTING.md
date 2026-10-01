@@ -16,8 +16,12 @@
 
 - Перед вливанием ветка перебазируется на свежий `main` (`git rebase main`), и все проверки
   должны быть зелёными: `npm run lint && npm run typecheck && npm test && npm run build`.
-- Пока нет GitHub и PR, ветка вливается в `main` только fast-forward:
+- Ветка вливается в `main` только fast-forward в общей копии:
   `git -C /workspace/max-chat merge --ff-only <ветка>`. Кто вливает — решает Руководитель.
+- `origin` — GitHub (`Max-Black-De/max-chat`, публичный). В `origin` пушит только Архитектор:
+  `main` — только после ff-merge, без force (`git push origin main`); рабочие ветки — по желанию
+  (например, чтобы открыть PR и прогнать CI). На каждый push и PR CI запускает lint, typecheck,
+  test, build и gitleaks; push в `main` после зелёных проверок деплоит демо на GitHub Pages.
 - Ветки, уже влитые в `main`, не переписываются (никаких rebase, amend и force-push).
 - После вливания worktree удаляется: `git -C /workspace/max-chat worktree remove /workspace/max-chat-wt/<имя>`.
 
@@ -63,3 +67,40 @@ npm run lint && npm run typecheck && npm test && npm run build
 ```
 gitleaks git --config .gitleaks.toml --redact --log-opts="--all" .
 ```
+
+### Хук pre-push: реальные данные (НФТ-11)
+
+gitleaks не знает реальных `idInstance`, `chatId` и номеров: их нельзя записать в публичный конфиг.
+Поэтому есть локальный хук `.husky/pre-push` → `scripts/check-leaks.sh` (POSIX sh + git + grep, Node
+не нужен). Он ищет фиксированные строки (`grep -F`) в том, что уходит в `origin`: в сообщениях
+коммитов, добавленных строках диффов и именах файлов, только в коммитах, которых в remote ещё нет.
+
+Шаблоны берутся **вне репозитория**:
+
+1. файл из env `MAXCHAT_LEAK_PATTERNS_FILE`, иначе
+2. `${XDG_CONFIG_HOME:-$HOME/.config}/max-chat/leak-patterns`;
+3. плюс значение env `GREEN_API_TOKEN`, если оно задано.
+
+Формат файла — один литерал на строку; пробелы по краям обрезаются, пустые строки и строки с `#`
+в начале пропускаются:
+
+```bash
+mkdir -p ~/.config/max-chat
+touch ~/.config/max-chat/leak-patterns && chmod 600 ~/.config/max-chat/leak-patterns
+# дальше — в редакторе: ваш idInstance, chatId, номера телефонов (в нужных форматах)
+```
+
+- **Нет ни одного источника — хук молча пропускает проверку** и пуш не ломает (с
+  `MAXCHAT_LEAK_VERBOSE=1` пишет об этом одну строку). Если `MAXCHAT_LEAK_PATTERNS_FILE` задан, но
+  файл не читается, — ошибка.
+- При совпадении пуш останавливается: «найдено совпадение с шаблоном №N в коммите <sha> файл
+  <path>» (N — номер строки в файле шаблонов; для токена — «совпадение с GREEN_API_TOKEN»). Сами
+  значения не печатаются и в argv не передаются (только через временный файл с правами 600).
+- Аудит всей истории, включая уже опубликованное:
+
+  ```bash
+  echo "refs/heads/main $(git rev-parse HEAD) refs/heads/main 0000000000000000000000000000000000000000" |
+    MAXCHAT_LEAK_SCAN_ALL=1 MAXCHAT_LEAK_VERBOSE=1 sh scripts/check-leaks.sh
+  ```
+
+- Хук ставится вместе с остальными при `npm install` (husky); `HUSKY=0` отключает все хуки.
