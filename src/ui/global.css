@@ -1,7 +1,7 @@
 /*
  * Глобальные стили (F6). Светлая тема по мотивам web.max.ru (НФТ-7): только общая идея макета,
  * без их ассетов, логотипов и шрифтов; без UI-китов (Р-9). Только CSS-файлы (CSP style-src 'self').
- * Узкий экран — Д-6e.
+ * Тёмная тема — по prefers-color-scheme, без переключателя (Д-6f). Узкий экран — Д-6e.
  */
 
 /* ---------- Переменные ---------- */
@@ -34,6 +34,7 @@
   --radius-bubble: 16px;
   --sidebar-width: 340px;
 
+  color-scheme: light dark;
   font-family:
     system-ui,
     -apple-system,
@@ -43,6 +44,38 @@
   color: var(--c-text);
   background-color: var(--c-bg);
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Д-6f: тёмная тема по настройке системы. Контраст текста ≥ WCAG AA 4.5:1 в обеих темах: текст и
+ * приглушённый текст на фоне, пузырях и выделении, ошибки/баннеры на своих фонах, белый на акценте.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: #17191d;
+    --c-bg-muted: #1f2227;
+    --c-chat-bg: #111316;
+    --c-border: #2e333a;
+    --c-text: #e8eaed;
+    --c-text-muted: #a3aab5;
+    --c-accent: #3367e0;
+    --c-accent-hover: #2f62d0;
+    --c-accent-text: #8fb0ff;
+    --c-on-accent: #ffffff;
+    --c-focus: #8fb0ff;
+    --c-hover: #23272d;
+    --c-selected: #24314d;
+    --c-bubble-in: #24282e;
+    --c-bubble-out: #1f3560;
+    --c-error-bg: #3a1d1d;
+    --c-error: #ffb4ab;
+    --c-warning-bg: #3a2e12;
+    --c-warning: #ffd88a;
+    --c-info-bg: #1d2a45;
+    --c-info: #c3d5ff;
+    --c-shadow: rgb(0 0 0 / 35%);
+    --c-backdrop: rgb(0 0 0 / 60%);
+  }
 }
 
 * {
