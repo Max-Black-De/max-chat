@@ -11,3 +11,9 @@ export const RECEIVE_HTTP_TIMEOUT_MS = 30_000;
 
 /** Максимальная длина текста сообщения [док SendMessage]; ТЗ §4.3 п. 3.5. */
 export const MAX_MESSAGE_LENGTH = 4000;
+
+/** Таймаут HTTP-запроса по умолчанию для остальных методов, мс (Р-20). С запасом на CORS-preflight POST/DELETE (~260 мс, A2). */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
+/** Минимальный запас HTTP-таймаута receiveNotification сверх `receiveTimeout`, мс (анализ §3.5). */
+export const RECEIVE_TIMEOUT_MARGIN_MS = 10_000;
