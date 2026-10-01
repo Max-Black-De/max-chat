@@ -345,6 +345,29 @@ describe('работа после входа', () => {
     expect(h.state.quota.visible).toBe(false);
   });
 
+  it('466 на receive / delete — событие очереди: закрытый баннер не возвращается; 466 на send — возвращается (ВА-13, v1.3.7)', async () => {
+    const quota466 = { status: 466, body: { correspondentsStatus: { used: 3, total: 3 } } };
+    const h = await loggedIn({
+      receiveNotification: [quota466],
+      deleteNotification: [quota466],
+      sendMessage: [quota466],
+    });
+    const c = h.controller.getClient();
+    // До закрытия 466 очереди баннер показывает.
+    await c?.receiveNotification().catch(() => undefined);
+    expect(h.state.quota.visible).toBe(true);
+    h.controller.dismissQuotaBanner();
+    await c?.receiveNotification().catch(() => undefined);
+    expect(h.state.quota.visible).toBe(false);
+    await c?.deleteNotification(1).catch(() => undefined);
+    expect(h.state.quota.visible).toBe(false);
+    h.controller.reportQueueQuota();
+    expect(h.state.quota.visible).toBe(false);
+    // Действие пользователя — показывает снова.
+    await c?.sendMessage({ chatId: '10000000', message: 'x' }).catch(() => undefined);
+    expect(h.state.quota.visible).toBe(true);
+  });
+
   it('«Проверить снова» вызывает только getSettings; ответ после выхода игнорируется', async () => {
     const h = await loggedIn({
       getSettings: [{ body: { ...OK_SETTINGS, webhookUrl: 'https://hook.example' } }],

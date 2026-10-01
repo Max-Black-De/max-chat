@@ -84,6 +84,12 @@ export interface SessionController {
   onSessionEnd(listener: (reason: SessionEndReason) => void): () => void;
 }
 
+/** Методы очереди: их 466 — событие очереди, а не действие пользователя (§5.5, ВА-13). */
+const QUEUE_METHODS: ReadonlySet<GreenApiMethod> = new Set<GreenApiMethod>([
+  'receiveNotification',
+  'deleteNotification',
+]);
+
 const SILENT_CODES: ReadonlySet<string> = new Set([
   GreenApiErrorCode.ABORTED,
   GreenApiErrorCode.SESSION_CLOSED,
@@ -163,8 +169,10 @@ export function createSessionController(deps: SessionControllerDeps): SessionCon
         dispatch({ type: 'webhookUrlDetected', generation: gen });
         return;
       default:
+        // ВА-13, v1.3.7: 466 на receive / delete — событие очереди (закрытый баннер не
+        // возвращается), на send / checkAccount — действие пользователя (показывает снова).
         if (isQuotaError(error) && shouldShowQuotaBanner(error.quota))
-          dispatch({ type: 'quotaChats', source: 'user' });
+          dispatch({ type: 'quotaChats', source: QUEUE_METHODS.has(method) ? 'queue' : 'user' });
         if (error.httpStatus !== undefined) dispatch({ type: 'apiHttpFailed', generation: gen });
     }
   }
