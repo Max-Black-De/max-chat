@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { GreenApiError, GreenApiErrorCode } from '../errors';
 import { isCheckAccountChatId, messageLength } from '../client';
 import {
-  incomingChannelImage,
-  incomingGroupTextQuoted,
-  incomingPersonalText,
-  outgoingApiExtendedText,
-  outgoingPhoneText,
-} from '../../test/fixtures/apiNotifications';
+  channelImage,
+  groupQuotedWithPhone,
+  incomingText,
+  outgoingApi,
+  outgoingPhone,
+  receipt,
+} from '../../test/fixtures';
 import {
   makeClient,
   mockFetch,
@@ -96,27 +97,27 @@ describe('getSettings: проверка типов полей (EC-E5)', () => {
 describe('checkAccount', () => {
   it('phoneNumber уходит целым числом, не строкой (§4.2 п. 2.5)', async () => {
     const m = mockFetch({ body: { exist: true, chatId: '10000002', fromCache: false } });
-    const r = await makeClient(m.fetch).checkAccount('79991234567');
+    const r = await makeClient(m.fetch).checkAccount('79990000001');
     expect(r).toEqual({ exist: true, chatId: '10000002', fromCache: false });
-    expect(callAt(m.calls, 0).init.body).toBe('{"phoneNumber":79991234567}');
+    expect(callAt(m.calls, 0).init.body).toBe('{"phoneNumber":79990000001}');
   });
 
   it('принимает номер числом и номер РБ (375…)', async () => {
     const m = mockFetch({ body: { exist: true, chatId: '10000003', fromCache: true } });
-    await makeClient(m.fetch).checkAccount(375291234567);
-    expect(callAt(m.calls, 0).init.body).toBe('{"phoneNumber":375291234567}');
+    await makeClient(m.fetch).checkAccount(375290000001);
+    expect(callAt(m.calls, 0).init.body).toBe('{"phoneNumber":375290000001}');
   });
 
   it('exist:false → chatId ""', async () => {
     const c = makeClient(mockFetch({ body: { exist: false, chatId: '', fromCache: false } }).fetch);
-    await expect(c.checkAccount('79991234567')).resolves.toEqual({
+    await expect(c.checkAccount('79990000001')).resolves.toEqual({
       exist: false,
       chatId: '',
       fromCache: false,
     });
   });
 
-  it.each(['89991234567', '+79991234567', '7999123456', '380991234567', '', 'abc'])(
+  it.each(['89990000001', '+79990000001', '7999000000', '380990000001', '', 'abc'])(
     'ненормализованный номер %j → INVALID_ARGUMENT без запроса',
     async (phone) => {
       const m = mockFetch({ body: {} });
@@ -141,7 +142,7 @@ describe('checkAccount', () => {
     ['exist строкой', { exist: 'true', chatId: '10000000' }],
   ])('%s → UNEXPECTED_RESPONSE, один запрос, retry none', async (_name, body) => {
     const m = mockFetch({ body }, { body: { exist: true, chatId: '10000000' } });
-    const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79991234567'));
+    const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79990000001'));
     expect(e).toBeInstanceOf(GreenApiError);
     expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
     expect(e.retry).toBe('none');
@@ -150,7 +151,7 @@ describe('checkAccount', () => {
 
   it('битый JSON → INVALID_JSON без повтора', async () => {
     const m = mockFetch({ body: '{"exist":true,' });
-    const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79991234567'));
+    const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79990000001'));
     expect(e.code).toBe(GreenApiErrorCode.INVALID_JSON);
     expect(e.retry).toBe('none');
     expect(m.calls).toHaveLength(1);
@@ -158,7 +159,7 @@ describe('checkAccount', () => {
 
   it('chatId группы с ведущим минусом — допустим (п. 2.6)', async () => {
     const c = makeClient(mockFetch({ body: { exist: true, chatId: '-10000000' } }).fetch);
-    await expect(c.checkAccount('79991234567')).resolves.toEqual({
+    await expect(c.checkAccount('79990000001')).resolves.toEqual({
       exist: true,
       chatId: '-10000000',
       fromCache: false,
@@ -167,7 +168,7 @@ describe('checkAccount', () => {
 
   it('exist:false — штатный ответ, chatId не проверяется', async () => {
     const c = makeClient(mockFetch({ body: { exist: false, chatId: 'abc' } }).fetch);
-    await expect(c.checkAccount('79991234567')).resolves.toEqual({
+    await expect(c.checkAccount('79990000001')).resolves.toEqual({
       exist: false,
       chatId: '',
       fromCache: false,
@@ -205,7 +206,7 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
     });
   });
 
-  it.each(['79991234567@c.us', '10000002@c.us', '-10000000000001@g.us'])(
+  it.each(['79990000001@c.us', '10000002@c.us', '-10000000000001@g.us'])(
     'chatId %j с @ запрещён, запрос не уходит',
     async (chatId) => {
       const m = mockFetch({ body: { idMessage: '1' } });
@@ -304,11 +305,11 @@ describe('receiveNotification (§5.2)', () => {
   });
 
   it.each([
-    ['outgoingPhoneText', outgoingPhoneText],
-    ['outgoingApiExtendedText', outgoingApiExtendedText],
-    ['incomingGroupTextQuoted', incomingGroupTextQuoted],
-    ['incomingChannelImage', incomingChannelImage],
-    ['incomingPersonalText', incomingPersonalText],
+    ['outgoingPhone', receipt(outgoingPhone, 1001)],
+    ['outgoingApi', receipt(outgoingApi, 1002)],
+    ['groupQuotedWithPhone', receipt(groupQuotedWithPhone, 1003)],
+    ['channelImage', receipt(channelImage, 1004)],
+    ['incomingText', receipt(incomingText, 1005)],
   ])('фикстура %s возвращается без изменений', async (_name, fx) => {
     const c = makeClient(mockFetch({ body: JSON.stringify(fx) }).fetch);
     const r = await c.receiveNotification();

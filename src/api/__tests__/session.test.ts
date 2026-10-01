@@ -27,7 +27,7 @@ const opt = (signal?: AbortSignal) => (signal ? { signal } : {});
 const CALLS: Record<string, Call> = {
   getStateInstance: (c, s) => c.getStateInstance(opt(s)),
   getSettings: (c, s) => c.getSettings(opt(s)),
-  checkAccount: (c, s) => c.checkAccount('79991234567', opt(s)),
+  checkAccount: (c, s) => c.checkAccount('79990000001', opt(s)),
   sendMessage: (c, s) => c.sendMessage({ chatId: '10000002', message: 'x' }, opt(s)),
   receiveNotification: (c, s) => c.receiveNotification(opt(s)),
   deleteNotification: (c, s) => c.deleteNotification(1, opt(s)),
@@ -265,7 +265,7 @@ describe('внешний signal отменён, пока читалось тел
 });
 
 describe('токен не попадает в ошибки и логи, включая TypeError fetch с URL, cause и stack (EC-X1, EC-T6)', () => {
-  const tokenUrl = `https://api.example.test/waInstance110000000042/getSettings/${FAKE_TOKEN}`;
+  const tokenUrl = `https://api.example.test/waInstance1101000000/getSettings/${FAKE_TOKEN}`;
   const fetchErrors: [string, unknown][] = [
     ['TypeError с URL', new TypeError(`Failed to fetch ${tokenUrl}`)],
     [

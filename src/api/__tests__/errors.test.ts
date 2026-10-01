@@ -24,7 +24,7 @@ type Call = (c: GreenApiClient, signal?: AbortSignal) => Promise<unknown>;
 const METHODS: Record<string, Call> = {
   getStateInstance: (c, signal) => c.getStateInstance(signal ? { signal } : {}),
   getSettings: (c, signal) => c.getSettings(signal ? { signal } : {}),
-  checkAccount: (c, signal) => c.checkAccount('79991234567', signal ? { signal } : {}),
+  checkAccount: (c, signal) => c.checkAccount('79990000001', signal ? { signal } : {}),
   sendMessage: (c, signal) =>
     c.sendMessage({ chatId: '10000002', message: 'x' }, signal ? { signal } : {}),
   receiveNotification: (c, signal) => c.receiveNotification(signal ? { signal } : {}),
@@ -426,7 +426,7 @@ describe('рекомендации повтора (retry)', () => {
       { status: 400, body: 'instance is starting or not authorized' },
     ] as MockReply[]) {
       const m = mockFetch(reply);
-      const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79991234567'));
+      const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79990000001'));
       expect(e.retry).toBe('none');
       expect(m.calls).toHaveLength(1);
     }

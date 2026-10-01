@@ -1,37 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import {
-  incomingChannelImage,
-  incomingGroupTextQuoted,
-  incomingPersonalText,
-  outgoingApiExtendedText,
-  outgoingPhoneText,
-} from '../test/fixtures/apiNotifications';
+  channelImage,
+  groupQuotedWithPhone,
+  incomingText,
+  outgoingApi,
+  outgoingPhone,
+} from '../test/fixtures';
 import { extractMessageText } from './extractText';
 
 describe('extractMessageText (§5.3)', () => {
   it('textMessage → textMessageData.textMessage', () => {
-    expect(extractMessageText(outgoingPhoneText.body.messageData)).toEqual({
+    expect(extractMessageText(outgoingPhone.messageData)).toEqual({
       kind: 'text',
-      text: outgoingPhoneText.body.messageData.textMessageData.textMessage,
+      text: 'Тестовое сообщение с телефона',
     });
-    expect(extractMessageText(incomingPersonalText.body.messageData)).toEqual({
+    expect(extractMessageText(incomingText.messageData)).toEqual({
       kind: 'text',
-      text: 'Ответ собеседника',
+      text: 'Тестовый ответ',
     });
   });
 
   it('textMessage с quotedMessage → только свой текст (Р-17)', () => {
-    const r = extractMessageText(incomingGroupTextQuoted.body.messageData);
+    const r = extractMessageText(groupQuotedWithPhone.messageData);
     expect(r).toEqual({
       kind: 'text',
-      text: incomingGroupTextQuoted.body.messageData.textMessageData.textMessage,
+      text: 'Тестовый ответ в группе',
     });
   });
 
   it('extendedTextMessage (исходящее через API) → extendedTextMessageData.text', () => {
-    expect(extractMessageText(outgoingApiExtendedText.body.messageData)).toEqual({
+    expect(extractMessageText(outgoingApi.messageData)).toEqual({
       kind: 'text',
-      text: outgoingApiExtendedText.body.messageData.extendedTextMessageData.text,
+      text: 'Тестовое сообщение',
     });
   });
 
@@ -45,7 +45,7 @@ describe('extractMessageText (§5.3)', () => {
   });
 
   it('нетекстовые типы → заглушка (Р-11)', () => {
-    expect(extractMessageText(incomingChannelImage.body.messageData)).toEqual({
+    expect(extractMessageText(channelImage.messageData)).toEqual({
       kind: 'unsupported',
       typeMessage: 'imageMessage',
     });

@@ -32,7 +32,7 @@ describe('построение URL (§5.1)', () => {
 
   it('формат {apiUrl}/waInstance{id}/{method}/{token}, без /v3', () => {
     expect(buildMethodUrl(FAKE_CREDS, 'getStateInstance')).toBe(
-      `https://api.example.test/waInstance110000000042/getStateInstance/${FAKE_TOKEN}`,
+      `https://api.example.test/waInstance1101000000/getStateInstance/${FAKE_TOKEN}`,
     );
   });
 
@@ -40,28 +40,28 @@ describe('построение URL (§5.1)', () => {
     expect(
       buildMethodUrl(FAKE_CREDS, 'receiveNotification', { query: { receiveTimeout: 20 } }),
     ).toBe(
-      `https://api.example.test/waInstance110000000042/receiveNotification/${FAKE_TOKEN}?receiveTimeout=20`,
+      `https://api.example.test/waInstance1101000000/receiveNotification/${FAKE_TOKEN}?receiveTimeout=20`,
     );
     expect(buildMethodUrl(FAKE_CREDS, 'deleteNotification', { pathSuffix: [12345] })).toBe(
-      `https://api.example.test/waInstance110000000042/deleteNotification/${FAKE_TOKEN}/12345`,
+      `https://api.example.test/waInstance1101000000/deleteNotification/${FAKE_TOKEN}/12345`,
     );
   });
 
   it('apiUrl с путём (например, /v3) сохраняется', () => {
     expect(
       buildMethodUrl({ ...FAKE_CREDS, apiUrl: 'https://api.example.test/v3/' }, 'getSettings'),
-    ).toBe(`https://api.example.test/v3/waInstance110000000042/getSettings/${FAKE_TOKEN}`);
+    ).toBe(`https://api.example.test/v3/waInstance1101000000/getSettings/${FAKE_TOKEN}`);
   });
 
   it('токен с небезопасными символами кодируется', () => {
     expect(buildMethodUrl({ ...FAKE_CREDS, apiTokenInstance: 'ab/cd?ef' }, 'getSettings')).toBe(
-      'https://api.example.test/waInstance110000000042/getSettings/ab%2Fcd%3Fef',
+      'https://api.example.test/waInstance1101000000/getSettings/ab%2Fcd%3Fef',
     );
   });
 
   it('замаскированный URL содержит *** вместо токена', () => {
     const masked = buildMaskedUrl(FAKE_CREDS, 'deleteNotification', { pathSuffix: [7] });
-    expect(masked).toBe('https://api.example.test/waInstance110000000042/deleteNotification/***/7');
+    expect(masked).toBe('https://api.example.test/waInstance1101000000/deleteNotification/***/7');
     expect(masked).not.toContain(FAKE_TOKEN);
   });
 
@@ -137,11 +137,11 @@ describe('построение URL (§5.1)', () => {
     const c = makeClient(m.fetch);
     await c.getStateInstance();
     await c.getSettings();
-    await c.checkAccount('79991234567');
+    await c.checkAccount('79990000001');
     await c.sendMessage({ chatId: '10000002', message: 'Привет' });
     await c.receiveNotification();
     await c.deleteNotification(42);
-    const base = `https://api.example.test/waInstance110000000042`;
+    const base = `https://api.example.test/waInstance1101000000`;
     expect(m.calls.map((x) => [x.init.method, x.url])).toEqual([
       ['GET', `${base}/getStateInstance/${FAKE_TOKEN}`],
       ['GET', `${base}/getSettings/${FAKE_TOKEN}`],

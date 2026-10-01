@@ -24,7 +24,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const CHAT = '100000000001';
+const CHAT = '10000001';
 const OK_SEND = { body: { idMessage: 'BAE5000000000001' } };
 const send = (c: ReturnType<typeof makeClient>, signal?: AbortSignal) =>
   c.sendMessage({ chatId: CHAT, message: 'привет' }, signal ? { signal } : {});

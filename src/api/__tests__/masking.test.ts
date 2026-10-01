@@ -49,7 +49,7 @@ const ERROR_REPLIES: [string, MockReply][] = [
     '500 с токеном',
     {
       status: 500,
-      body: `crash at https://api.example.test/waInstance110000000042/x/${FAKE_TOKEN}`,
+      body: `crash at https://api.example.test/waInstance1101000000/x/${FAKE_TOKEN}`,
     },
   ],
   [
@@ -116,17 +116,17 @@ describe('маскирование токена (НФТ-3, §4.1 п. 1.10)', () 
     const c = makeClient(mockFetch({ body: { stateInstance: 'authorized' } }).fetch, { logger });
     await c.getStateInstance();
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('/waInstance110000000042/getStateInstance/***');
+    expect(lines[0]).toContain('/waInstance1101000000/getStateInstance/***');
     expect(lines[0]).not.toContain(FAKE_TOKEN);
   });
 
   it('клиент: toString, JSON.stringify, util.inspect, Object.keys не раскрывают токен', () => {
     const c = makeClient(mockFetch({ body: {} }).fetch);
     expect(String(c)).toBe(
-      'GreenApiClient(https://api.example.test, waInstance110000000042, token=***)',
+      'GreenApiClient(https://api.example.test, waInstance1101000000, token=***)',
     );
     expect(JSON.stringify(c)).toBe(
-      '{"apiUrl":"https://api.example.test","idInstance":"110000000042","apiTokenInstance":"***"}',
+      '{"apiUrl":"https://api.example.test","idInstance":"1101000000","apiTokenInstance":"***"}',
     );
     const inspectFn = (c as unknown as Record<symbol, () => string>)[
       Symbol.for('nodejs.util.inspect.custom')

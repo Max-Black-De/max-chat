@@ -1,17 +1,18 @@
 import { beforeEach, vi } from 'vitest';
 import { createGreenApiClient } from '../api/client';
 import { GreenApiError, GreenApiQuotaError, GreenApiSessionError } from '../api/errors';
+import { ID_INSTANCE } from './fixtures/constants';
 import type { GreenApiClientConfig, GreenApiLogger } from '../api/clientTypes';
 
 /**
  * Общие помощники тестов клиента GREEN-API (fetch-мок, логгер, пауза), см. `src/api/__tests__`.
  * Условные учётные данные: токен — явная заглушка, не похожая на секрет (публичный репозиторий,
- * gitleaks и verify:dist, НФТ-11). Значение то же, что в `src/test/fixtures` F2.
+ * gitleaks и verify:dist, НФТ-11). Значение то же, что у F2; idInstance — общий `ID_INSTANCE` из `src/test/fixtures`.
  */
 export const FAKE_TOKEN = 'TEST-TOKEN-placeholder-not-a-secret';
 export const FAKE_CREDS = {
   apiUrl: 'https://api.example.test/',
-  idInstance: '110000000042',
+  idInstance: ID_INSTANCE,
   apiTokenInstance: FAKE_TOKEN,
 } as const;
 

@@ -3,11 +3,26 @@ import { GreenApiErrorCode, GreenApiQuotaError, isQuotaError } from '../errors';
 import { QUOTA_TEXTS, describeError, quotaText } from '../messages';
 import { parseQuota466Body, parseQuotaExceededNotification } from '../quota';
 import {
-  incomingPersonalText,
-  quota466Bodies,
+  QUOTA_DESCRIPTION_CHAT_IDS,
+  body466CorrespondentsStatusNoUsedTotal,
+  body466CorrespondentsStatusStrings,
+  body466InvokeStatus,
+  body466InvokeStatusNoUsedTotal,
+  body466QuotaExceeded,
+  incomingText,
   quotaExceededNotification,
-  quotaExceededNotificationMinimal,
-} from '../../test/fixtures/apiNotifications';
+  quotaExceededNotificationNoUsedTotal,
+  receipt,
+} from '../../test/fixtures';
+
+/** Тела 466 из общих фикстур QA (src/test/fixtures/quota.ts) — три формата + без used/total. */
+const quota466Bodies = {
+  invokeStatusCheckAccount: body466InvokeStatus,
+  correspondentsStatusStrings: body466CorrespondentsStatusStrings,
+  quotaDataNotificationShape: body466QuotaExceeded,
+  correspondentsStatusMinimal: body466CorrespondentsStatusNoUsedTotal,
+  invokeStatusMinimal: body466InvokeStatusNoUsedTotal,
+} as const;
 import {
   catchError,
   makeClient,
@@ -35,7 +50,7 @@ const check = (body: unknown) => {
   });
   const { logger, lines } = recordingLogger();
   const c = makeClient(m.fetch, { logger });
-  return { m, lines, run: () => catchError(c.checkAccount('79991234567')) };
+  return { m, lines, run: () => catchError(c.checkAccount('79990000001')) };
 };
 
 describe('parseQuota466Body: три формата (§5.5)', () => {
@@ -118,7 +133,7 @@ describe('QuotaInfo без used / total / description', () => {
   });
 
   it('уведомление quotaExceeded без used / total / description', () => {
-    expect(parseQuotaExceededNotification(quotaExceededNotificationMinimal.body)).toEqual({
+    expect(parseQuotaExceededNotification(quotaExceededNotificationNoUsedTotal)).toEqual({
       kind: 'chats',
       source: 'quotaData',
       method: 'correspondents',
@@ -181,7 +196,8 @@ describe('466 в клиенте', () => {
     const e = asQuotaError(await t.run());
     const dumps = [e.message, String(e), JSON.stringify(e), ...t.lines];
     for (const d of dumps) {
-      expect(d).not.toMatch(/following chats|-10000000000001/);
+      expect(d).not.toMatch(/following chats/);
+      for (const id of QUOTA_DESCRIPTION_CHAT_IDS) expect(d).not.toContain(id);
     }
     expect(t.lines.join('\n')).toMatch(/"used":3,"total":3/);
   });
@@ -202,7 +218,7 @@ describe('466 в клиенте', () => {
 
 describe('уведомление quotaExceeded (§5.5)', () => {
   it('разбирается, timestamp не требуется, description не возвращается', () => {
-    const q = parseQuotaExceededNotification(quotaExceededNotification.body);
+    const q = parseQuotaExceededNotification(quotaExceededNotification);
     expect(q).toEqual({
       kind: 'chats',
       source: 'quotaData',
@@ -224,13 +240,13 @@ describe('уведомление quotaExceeded (§5.5)', () => {
   });
 
   it('прочие уведомления и мусор → null', () => {
-    expect(parseQuotaExceededNotification(incomingPersonalText.body)).toBeNull();
+    expect(parseQuotaExceededNotification(incomingText)).toBeNull();
     expect(parseQuotaExceededNotification(null)).toBeNull();
     expect(parseQuotaExceededNotification('quotaExceeded')).toBeNull();
   });
 
   it('приходит через receiveNotification как обычное уведомление', async () => {
-    const c = makeClient(mockFetch({ body: quotaExceededNotification }).fetch);
+    const c = makeClient(mockFetch({ body: receipt(quotaExceededNotification, 1102) }).fetch);
     const r = await c.receiveNotification();
     expect(r?.receiptId).toBe(1102);
     expect(parseQuotaExceededNotification(r?.body)).toMatchObject({ kind: 'chats', used: 3 });
