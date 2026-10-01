@@ -6,7 +6,8 @@
 import { SEND_TEXTS } from '../api';
 
 export interface RecoverableMessage {
-  status: string;
+  /** У входящих статуса нет. */
+  status?: string | undefined;
   errorText?: string | undefined;
 }
 

@@ -83,8 +83,20 @@ describe('AppStorage (Р-2, EC-D8, EC-S4)', () => {
     expect(backend.map.get('maxchat:1:v1:nums')).toBe('[1]');
     expect(s.read('nums', isNumArray)).toBeUndefined(); // удалено только в этой вкладке
     s.setReadOnly(false);
+    // захватила замок — память вкладки сброшена, читается снова localStorage (EC-S10)
+    expect(s.read('nums', isNumArray)).toEqual([1]);
     expect(s.write('nums', [3])).toBe(true);
     expect(backend.map.get('maxchat:1:v1:nums')).toBe('[3]');
+  });
+
+  it('EC-S10: после сбоя записи выход из «только чтения» память не сбрасывает', () => {
+    const backend = memoryStorage({}, true);
+    const s = createAppStorage({ idInstance: '1', backend, readOnly: true, warn: () => undefined });
+    s.setReadOnly(false);
+    expect(s.write('nums', [1])).toBe(false);
+    s.setReadOnly(true);
+    s.setReadOnly(false);
+    expect(s.read('nums', isNumArray)).toEqual([1]);
   });
 
   it('remove удаляет раздел', () => {

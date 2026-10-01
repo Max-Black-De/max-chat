@@ -8,7 +8,8 @@
  *   хранилище переходит в режим «только память»: значения живут до перезагрузки, один раз
  *   вызывается `onWriteFailure` (баннер) и один `console.warn` без содержимого.
  * - Режим «только чтение» (`setReadOnly(true)`) — для неопрашивающей вкладки (Р-12, EC-S4):
- *   запись в localStorage не идёт, значения держатся только в памяти этой вкладки.
+ *   запись в localStorage не идёт, значения держатся только в памяти этой вкладки. После
+ *   `setReadOnly(false)` память сбрасывается и чтение снова идёт из localStorage (EC-S10).
  * - Токен сюда не пишется никогда (НФТ-3): учётные данные — в `sessionCredentials.ts`.
  */
 import { STORAGE_PREFIX } from './constants';
@@ -139,6 +140,9 @@ export function createAppStorage(options: AppStorageOptions): AppStorage {
     },
 
     setReadOnly(value) {
+      // Вкладка захватила замок (EC-S10): изменения, жившие только в её памяти, отбрасываются —
+      // источник истины снова localStorage, его и перечитывают (счётчик может вернуться).
+      if (readOnly && !value && !failed && backend) memory.clear();
       readOnly = value;
     },
     isReadOnly: () => readOnly,
