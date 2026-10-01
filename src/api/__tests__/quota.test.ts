@@ -6,7 +6,7 @@ import {
   incomingPersonalText,
   quota466Bodies,
   quotaExceededNotification,
-} from './fixtures/notifications';
+} from '../../test/fixtures/apiNotifications';
 import { catchError, makeClient, mockFetch, recordingLogger, blockRealNetwork } from './helpers';
 
 blockRealNetwork();

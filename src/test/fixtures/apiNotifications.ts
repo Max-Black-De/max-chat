@@ -8,7 +8,7 @@
  *
  * `satisfies` проверяет, что типы src/api/types.ts соответствуют реальным структурам.
  */
-import type { QuotaExceededNotification, ReceivedNotification } from '../../types';
+import type { QuotaExceededNotification, ReceivedNotification } from '../../api/types';
 
 export const FAKE_ID_INSTANCE = '110000000042';
 /** Условный личный chatId собеседника. */

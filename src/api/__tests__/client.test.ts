@@ -7,7 +7,7 @@ import {
   incomingPersonalText,
   outgoingApiExtendedText,
   outgoingPhoneText,
-} from './fixtures/notifications';
+} from '../../test/fixtures/apiNotifications';
 import { catchError, makeClient, mockFetch, blockRealNetwork, callAt, bodyText } from './helpers';
 
 blockRealNetwork();

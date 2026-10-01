@@ -5,7 +5,7 @@ import {
   incomingPersonalText,
   outgoingApiExtendedText,
   outgoingPhoneText,
-} from '../api/__tests__/fixtures/notifications';
+} from '../test/fixtures/apiNotifications';
 import { extractMessageText } from './extractText';
 
 describe('extractMessageText (§5.3)', () => {
