@@ -6,6 +6,7 @@ import {
   incomingPersonalText,
   quota466Bodies,
   quotaExceededNotification,
+  quotaExceededNotificationMinimal,
 } from '../../test/fixtures/apiNotifications';
 import { catchError, makeClient, mockFetch, recordingLogger, blockRealNetwork } from './helpers';
 
@@ -93,6 +94,42 @@ describe('parseQuota466Body: три формата (§5.5)', () => {
   });
 });
 
+describe('QuotaInfo без used / total / description', () => {
+  it('466 correspondentsStatus и invokeStatus без необязательных полей разбираются', () => {
+    expect(parseQuota466Body(quota466Bodies.correspondentsStatusMinimal, 'sendMessage')).toEqual({
+      kind: 'chats',
+      source: 'correspondentsStatus',
+      method: 'correspondents',
+      status: 'CORRESPONDENTS_QUOTA_EXCEEDED',
+    });
+    expect(parseQuota466Body(quota466Bodies.invokeStatusMinimal, 'checkAccount')).toEqual({
+      kind: 'checks',
+      source: 'invokeStatus',
+      method: 'checkAccount',
+      status: 'QUOTE_EXCEEDED',
+    });
+  });
+
+  it('уведомление quotaExceeded без used / total / description', () => {
+    expect(parseQuotaExceededNotification(quotaExceededNotificationMinimal.body)).toEqual({
+      kind: 'chats',
+      source: 'quotaData',
+      method: 'correspondents',
+      status: 'CORRESPONDENTS_QUOTA_EXCEEDED',
+    });
+  });
+
+  it('в клиенте: 466 без used/total → GreenApiQuotaError, в reason «?»', async () => {
+    const { run } = send(quota466Bodies.correspondentsStatusMinimal);
+    const e = await run();
+    expect(isQuotaError(e)).toBe(true);
+    if (!isQuotaError(e)) return;
+    expect(e.quota.kind).toBe('chats');
+    expect(e.reason).toBe('quota=chats method=correspondents used=? total=?');
+    expect(describeError(e, 'send')).toBe(QUOTA_TEXTS.sendChats);
+  });
+});
+
 describe('466 в клиенте', () => {
   it.each(Object.entries(quota466Bodies))(
     'sendMessage + %s → GreenApiQuotaError(chats), без автоповтора',
@@ -105,7 +142,7 @@ describe('466 в клиенте', () => {
       expect(q.httpStatus).toBe(466);
       expect(q.retry).toBe('none');
       // invokeStatus с method=checkAccount на sendMessage — формально «checks»; остальные — chats.
-      expect(q.quota.kind).toBe(name === 'invokeStatusCheckAccount' ? 'checks' : 'chats');
+      expect(q.quota.kind).toBe(name.startsWith('invokeStatus') ? 'checks' : 'chats');
       expect(t.m.calls).toHaveLength(1);
     },
   );

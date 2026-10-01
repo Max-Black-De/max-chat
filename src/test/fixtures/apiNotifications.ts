@@ -8,7 +8,7 @@
  *
  * `satisfies` проверяет, что типы src/api/types.ts соответствуют реальным структурам.
  */
-import type { QuotaExceededNotification, ReceivedNotification } from '../../api/types';
+import type { QuotaExceededNotification, QuotaInfo, ReceivedNotification } from '../../api/types';
 
 export const FAKE_ID_INSTANCE = '110000000042';
 /** Условный личный chatId собеседника. */
@@ -295,4 +295,24 @@ export const quota466Bodies = {
     },
   },
   quotaDataNotificationShape: quotaExceededNotification.body,
+  /** Без used / total / description (в документации поля описаны не во всех форматах). */
+  correspondentsStatusMinimal: {
+    correspondentsStatus: {
+      method: 'correspondents',
+      status: 'CORRESPONDENTS_QUOTA_EXCEEDED',
+    } satisfies QuotaInfo,
+  },
+  invokeStatusMinimal: {
+    invokeStatus: { method: 'checkAccount', status: 'QUOTE_EXCEEDED' } satisfies QuotaInfo,
+  },
 } as const;
+
+/** quotaExceeded без used / total / description. */
+export const quotaExceededNotificationMinimal = {
+  receiptId: 1103,
+  body: {
+    typeWebhook: 'quotaExceeded',
+    instanceData: { idInstance: 110000000042, wid: '79990000000@c.us', typeInstance: 'v3' },
+    quotaData: { method: 'correspondents', status: 'CORRESPONDENTS_QUOTA_EXCEEDED' },
+  } satisfies QuotaExceededNotification,
+};

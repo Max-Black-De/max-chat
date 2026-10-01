@@ -269,11 +269,13 @@ export type KnownErrorHttpStatus = 400 | 401 | 403 | 429 | 466 | 469 | 499 | 500
 export interface QuotaInfo {
   /** `"checkAccount"`, `"correspondents"` и др. */
   method: string;
-  used: number | string;
-  total: number | string;
+  /** Приходит не всегда (формат 466 не подтверждён) — в логе тогда `?`. */
+  used?: number | string;
+  total?: number | string;
   /** Например `"QUOTE_EXCEEDED"` (так в документации) или `"CORRESPONDENTS_QUOTA_EXCEEDED"`. */
   status: string;
-  description: string;
+  /** Список чужих chatId — пользователю и в лог не показывается (§5.5). Может отсутствовать. */
+  description?: string;
 }
 
 /** 466, вариант 1 — квота метода (например, 100 checkAccount в месяц). */
