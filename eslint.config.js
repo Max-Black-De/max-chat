@@ -47,6 +47,16 @@ export default defineConfig([
     },
   },
 
+  // Скрипты сборки и Vite-плагины выполняются в Node, не в браузере.
+  {
+    files: ['scripts/**/*.ts', 'plugins/**/*.ts'],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    files: ['scripts/**/*.ts'],
+    rules: { 'no-console': 'off' },
+  },
+
   // Конфиги инструментов (JS, Node).
   {
     files: ['**/*.js'],
