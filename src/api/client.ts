@@ -112,6 +112,46 @@ export function validateSendChatId(chatId: unknown): string | null {
   return null;
 }
 
+const SETTINGS_YES_NO_KEYS = [
+  'incomingWebhook',
+  'outgoingAPIMessageWebhook',
+  'outgoingMessageWebhook',
+  'outgoingWebhook',
+  'stateWebhook',
+  'markIncomingMessagesReaded',
+  'markIncomingMessagesReadedOnReply',
+  'editedMessageWebhook',
+  'deletedMessageWebhook',
+] as const satisfies readonly (keyof InstanceSettings)[];
+
+const SETTINGS_STRING_KEYS = [
+  'webhookUrl',
+  'wid',
+  'webhookUrlToken',
+  'typeInstance',
+] as const satisfies readonly (keyof InstanceSettings)[];
+
+/**
+ * Ответ getSettings → `InstanceSettings` (EC-E5): поле остаётся, только если тип верный
+ * (`"yes"`/`"no"`, строка, конечное число), иначе `undefined` — вызывающий код считает его
+ * «≠ "yes"» (П-2…П-4). Неизвестные поля отбрасываются.
+ */
+export function pickSettings(value: Record<string, unknown>): InstanceSettings {
+  const out: InstanceSettings = {};
+  for (const key of SETTINGS_YES_NO_KEYS) {
+    const v = value[key];
+    if (v === 'yes' || v === 'no') out[key] = v;
+  }
+  for (const key of SETTINGS_STRING_KEYS) {
+    const v = value[key];
+    if (typeof v === 'string') out[key] = v;
+  }
+  const delay = value.delaySendMessagesMilliseconds;
+  if (typeof delay === 'number' && Number.isFinite(delay))
+    out.delaySendMessagesMilliseconds = delay;
+  return out;
+}
+
 /**
  * chatId из ответа checkAccount (п. 2.6, EC-I9): непустая строка `^-?\d+$`.
  * Не строка (в том числе число), `…@c.us`, нецифровые символы — `false`.
@@ -344,7 +384,7 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
 
     async getSettings(options) {
       const { value } = await callJson('getSettings', 'GET', options);
-      return { ...value };
+      return pickSettings(value);
     },
 
     async checkAccount(phoneNumber, options) {

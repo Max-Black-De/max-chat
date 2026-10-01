@@ -29,7 +29,7 @@ describe('getStateInstance / getSettings', () => {
     expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
   });
 
-  it('getSettings возвращает все поля как есть', async () => {
+  it('getSettings возвращает поля верного типа как есть', async () => {
     const settings = {
       wid: '79990000000@c.us',
       webhookUrl: '',
@@ -42,6 +42,47 @@ describe('getStateInstance / getSettings', () => {
     };
     const c = makeClient(mockFetch({ body: settings }).fetch);
     await expect(c.getSettings()).resolves.toEqual(settings);
+  });
+});
+
+describe('getSettings: проверка типов полей (EC-E5)', () => {
+  it('null, число, «Yes», объект → поле undefined; неизвестные поля отброшены', async () => {
+    const c = makeClient(
+      mockFetch({
+        body: {
+          webhookUrl: null,
+          incomingWebhook: 1,
+          outgoingAPIMessageWebhook: 'Yes',
+          outgoingMessageWebhook: true,
+          outgoingWebhook: { v: 'yes' },
+          stateWebhook: 'no',
+          wid: 79990000000,
+          delaySendMessagesMilliseconds: '500',
+          somethingNew: 'yes',
+        },
+      }).fetch,
+    );
+    const r = await c.getSettings();
+    expect(r).toEqual({ stateWebhook: 'no' });
+    expect(r.webhookUrl).toBeUndefined();
+    expect(r.incomingWebhook).toBeUndefined();
+    expect('somethingNew' in r).toBe(false);
+  });
+
+  it('пустой объект → все поля undefined (П-2…П-4 сработают у вызывающего)', async () => {
+    const c = makeClient(mockFetch({ body: {} }).fetch);
+    await expect(c.getSettings()).resolves.toEqual({});
+  });
+
+  it('webhookUrl строкой сохраняется (П-1), в том числе непустой', async () => {
+    const c = makeClient(
+      mockFetch({ body: { webhookUrl: 'https://hook.example.test/x', incomingWebhook: 'no' } })
+        .fetch,
+    );
+    await expect(c.getSettings()).resolves.toEqual({
+      webhookUrl: 'https://hook.example.test/x',
+      incomingWebhook: 'no',
+    });
   });
 });
 

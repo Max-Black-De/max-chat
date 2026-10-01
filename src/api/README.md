@@ -21,7 +21,7 @@ const api = createGreenApiClient({
 });
 
 api.getStateInstance(opts?): Promise<StateInstanceResult>   // { stateInstance }
-api.getSettings(opts?): Promise<InstanceSettings>          // Partial<GetSettingsResponse>
+api.getSettings(opts?): Promise<InstanceSettings>          // Partial<GetSettingsResponse>; поле неверного типа → undefined (EC-E5)
 api.checkAccount(phone: string | number, opts?): Promise<{ exist: boolean; chatId: string; fromCache: boolean }>
 api.sendMessage({ chatId, message }, opts?): Promise<{ idMessage: string }>
 api.receiveNotification(opts?: ReceiveOptions)            // receiveTimeout 5..60, по умолч. 20
