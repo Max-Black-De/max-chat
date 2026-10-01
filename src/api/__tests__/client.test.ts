@@ -150,11 +150,27 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
     expect(m.calls).toHaveLength(1);
   });
 
-  it('длина считается в символах Unicode: 4000 эмодзи допустимы', async () => {
-    expect(messageLength('😀😀')).toBe(2);
+  it('длина = text.length (UTF-16, emoji = 2): 4000 emoji = 8000 → отклонить; 2000 emoji — можно (ВА-14)', async () => {
+    expect(messageLength('😀😀')).toBe(4);
+    expect(messageLength('a'.repeat(4000))).toBe(4000);
     const m = mockFetch({ body: { idMessage: '1' } });
-    await makeClient(m.fetch).sendMessage({ chatId: '10000002', message: '😀'.repeat(4000) });
+    const c = makeClient(m.fetch);
+    const e = (await catchError(
+      c.sendMessage({ chatId: '10000002', message: '😀'.repeat(4000) }),
+    )) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+    expect(m.calls).toHaveLength(0);
+    await c.sendMessage({ chatId: '10000002', message: '😀'.repeat(2000) });
     expect(m.calls).toHaveLength(1);
+  });
+
+  it('текст отправляется как есть, без trim (ВА-14)', async () => {
+    const m = mockFetch({ body: { idMessage: '1' } });
+    await makeClient(m.fetch).sendMessage({ chatId: '10000002', message: '  привет\n' });
+    expect(JSON.parse(bodyText(callAt(m.calls, 0)))).toEqual({
+      chatId: '10000002',
+      message: '  привет\n',
+    });
   });
 
   it('нет idMessage → UNEXPECTED_RESPONSE; 18-значный idMessage не теряет точность', async () => {
@@ -268,11 +284,12 @@ describe('deleteNotification (§5.2, §5.4)', () => {
     });
   });
 
-  it('прочие 500 → ошибка SERVER с backoff', async () => {
-    const c = makeClient(mockFetch({ status: 500, body: 'Internal error' }).fetch);
-    const e = (await catchError(c.deleteNotification(1))) as GreenApiError;
+  it('прочие 500 → после 3 встроенных повторов ошибка SERVER, retry none (ВА-17)', async () => {
+    const m = mockFetch({ status: 500, body: 'Internal error' });
+    const e = (await catchError(makeClient(m.fetch).deleteNotification(1))) as GreenApiError;
     expect(e.code).toBe(GreenApiErrorCode.SERVER);
-    expect(e.retry).toBe('backoff');
+    expect(e.retry).toBe('none');
+    expect(m.calls).toHaveLength(4);
   });
 
   it.each([-1, 1.5, Number.NaN, 2 ** 60])(

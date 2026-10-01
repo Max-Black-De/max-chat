@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildMaskedUrl, buildMethodUrl, normalizeApiUrl, validateCredentials } from '../url';
+import {
+  buildMaskedUrl,
+  buildMethodUrl,
+  normalizeApiUrl,
+  validateApiUrl,
+  validateCredentials,
+} from '../url';
+import { DEFAULT_API_URL } from '../constants';
+import { GreenApiError, GreenApiErrorCode } from '../errors';
+import { createGreenApiClient } from '../client';
 import { FAKE_CREDS, FAKE_TOKEN, makeClient, mockFetch, blockRealNetwork, callAt } from './helpers';
 
 blockRealNetwork();
@@ -50,11 +59,48 @@ describe('построение URL (§5.1)', () => {
     expect(validateCredentials({ ...FAKE_CREDS, idInstance: '11a' })).toMatch(/digits/);
     expect(validateCredentials({ ...FAKE_CREDS, idInstance: '' })).toMatch(/digits/);
     expect(validateCredentials({ ...FAKE_CREDS, apiUrl: 'not a url' })).toMatch(/URL/);
-    expect(validateCredentials({ ...FAKE_CREDS, apiUrl: 'ftp://x.test' })).toMatch(/http/);
+    expect(validateCredentials({ ...FAKE_CREDS, apiUrl: 'ftp://x.test' })).toMatch(/https:/);
+    expect(validateCredentials({ ...FAKE_CREDS, apiUrl: 'http://x.test' })).toMatch(/https:/);
     expect(validateCredentials({ ...FAKE_CREDS, apiUrl: 'https://x.test/?a=1' })).toMatch(/query/);
     expect(validateCredentials({ ...FAKE_CREDS, apiTokenInstance: '' })).toMatch(
       /apiTokenInstance/,
     );
+  });
+
+  it('validateApiUrl: только https:, пусто → адрес по умолчанию (п. 1.2, ВА-2)', () => {
+    const ERR = 'Введите адрес вида https://3100.api.green-api.com';
+    expect(validateApiUrl('')).toEqual({ ok: true, apiUrl: DEFAULT_API_URL });
+    expect(validateApiUrl('   ')).toEqual({ ok: true, apiUrl: DEFAULT_API_URL });
+    expect(validateApiUrl(undefined)).toEqual({ ok: true, apiUrl: 'https://api.green-api.com' });
+    expect(validateApiUrl(' https://3100.api.green-api.com// ')).toEqual({
+      ok: true,
+      apiUrl: 'https://3100.api.green-api.com',
+    });
+    expect(validateApiUrl('HTTPS://3100.api.green-api.com')).toMatchObject({ ok: true });
+    for (const bad of [
+      'http://3100.api.green-api.com',
+      'HTTP://3100.api.green-api.com',
+      'ftp://3100.api.green-api.com',
+      '3100.api.green-api.com',
+      'not a url',
+      'https://3100.api.green-api.com/?a=1',
+      'https://3100.api.green-api.com/#x',
+      'https://user:pass@3100.api.green-api.com',
+      'javascript:alert(1)',
+    ]) {
+      expect(validateApiUrl(bad)).toEqual({ ok: false, error: ERR });
+    }
+  });
+
+  it('клиент с http:// не создаётся (токен идёт в URL)', () => {
+    let e: unknown;
+    try {
+      createGreenApiClient({ ...FAKE_CREDS, apiUrl: 'http://api.example.test' });
+    } catch (x) {
+      e = x;
+    }
+    expect(e).toBeInstanceOf(GreenApiError);
+    expect((e as GreenApiError).code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
   });
 
   it('клиент использует нормализованный URL и правильные HTTP-методы', async () => {

@@ -51,13 +51,13 @@ describe('маппинг HTTP-кодов (§5.4)', () => {
       C.WEBHOOK_URL_SET,
     ],
     [400, 'Instance account is expired', C.INSTANCE_EXPIRED],
-    [400, 'Instance is deleted', C.INSTANCE_EXPIRED],
+    [400, 'Instance is deleted', C.INSTANCE_DELETED],
     [
       400,
       "Validation failed. Details: 'message' length must be less than or equal to 4000",
       C.BAD_REQUEST,
     ],
-    [400, 'check phone number timeout limit exceeded', C.CHECK_LIMIT],
+    [400, 'check phone number timeout limit exceeded', C.CHECK_TIMEOUT],
     [404, '', C.NOT_FOUND],
     [429, 'Too Many Requests', C.RATE_LIMITED],
     [469, 'User get contact info limit reached', C.CHECK_LIMIT],
@@ -99,6 +99,22 @@ describe('маппинг HTTP-кодов (§5.4)', () => {
     );
     expect(e2.code).toBe(C.CHECK_LIMIT);
     expect(e2.retry).toBe('none');
+  });
+});
+
+describe('{status:false, reason} при любом HTTP-коде (ВА-11)', () => {
+  it.each([200, 400, 500])('HTTP %i со status:false → по тексту причины', async (status) => {
+    const e1 = await errorOf(
+      { status, body: { status: false, reason: 'User get contact info limit reached' } },
+      METHODS.checkAccount,
+    );
+    expect(e1.code).toBe(C.CHECK_LIMIT);
+    expect(e1.httpStatus).toBe(status);
+    const e2 = await errorOf(
+      { status, body: { status: false, reason: 'check phone number timeout limit exceeded' } },
+      METHODS.checkAccount,
+    );
+    expect(e2.code).toBe(C.CHECK_TIMEOUT);
   });
 });
 
@@ -213,10 +229,15 @@ describe('рекомендации повтора (retry)', () => {
     }
   });
 
-  it('receive/delete: сеть, 429, 5xx → backoff; не авторизован → pause; 401/403/webhook → none', async () => {
-    for (const call of [method('receiveNotification'), method('deleteNotification')]) {
+  it('receive, getStateInstance, getSettings: сеть, 429, 5xx → backoff; не авторизован → pause; 401/403/webhook → none', async () => {
+    for (const call of [
+      method('receiveNotification'),
+      method('getStateInstance'),
+      method('getSettings'),
+    ]) {
       expect((await errorOf({ throws: new TypeError('x') }, call)).retry).toBe('backoff');
       expect((await errorOf({ status: 429 }, call)).retry).toBe('backoff');
+      expect((await errorOf({ status: 499 }, call)).retry).toBe('backoff');
       expect((await errorOf({ status: 502 }, call)).retry).toBe('backoff');
       expect(
         (await errorOf({ status: 400, body: 'instance is starting or not authorized' }, call))
@@ -230,17 +251,42 @@ describe('рекомендации повтора (retry)', () => {
     }
   });
 
-  it('checkAccount: сеть/5xx — без автоповтора (квота 100/мес), 469 — без автоповтора', async () => {
-    expect((await errorOf({ throws: new TypeError('x') }, METHODS.checkAccount)).retry).toBe(
-      'none',
-    );
-    expect((await errorOf({ status: 502 }, METHODS.checkAccount)).retry).toBe('none');
-    expect((await errorOf({ status: 469 }, METHODS.checkAccount)).retry).toBe('none');
+  it('deleteNotification: после встроенных повторов — none (дальше следующий receive, ВА-17); не авторизован → pause', async () => {
+    const call = method('deleteNotification');
+    expect((await errorOf({ throws: new TypeError('x') }, call)).retry).toBe('none');
+    expect((await errorOf({ status: 502 }, call)).retry).toBe('none');
+    expect(
+      (await errorOf({ status: 400, body: 'instance is starting or not authorized' }, call)).retry,
+    ).toBe('pause');
   });
 
-  it('клиент сам ничего не повторяет: ровно один fetch на вызов', async () => {
-    const m = mockFetch({ status: 502 });
-    await catchError(makeClient(m.fetch).receiveNotification());
-    expect(m.calls).toHaveLength(1);
+  it('checkAccount: никогда не повторяется — ни сеть, ни таймаут, ни 429/499/5xx, ни 469/not-ready (ВА-7)', async () => {
+    for (const reply of [
+      { throws: new TypeError('x') },
+      { status: 429 },
+      { status: 499 },
+      { status: 502 },
+      { status: 469 },
+      { status: 400, body: 'instance is starting or not authorized' },
+    ] as MockReply[]) {
+      const m = mockFetch(reply);
+      const e = (await catchError(
+        makeClient(m.fetch).checkAccount('79991234567'),
+      )) as GreenApiError;
+      expect(e.retry).toBe('none');
+      expect(m.calls).toHaveLength(1);
+    }
+  });
+
+  it('receive/getState/getSettings клиент сам не повторяет: ровно один fetch на вызов', async () => {
+    for (const run of [
+      (c: ReturnType<typeof makeClient>) => c.receiveNotification(),
+      (c: ReturnType<typeof makeClient>) => c.getStateInstance(),
+      (c: ReturnType<typeof makeClient>) => c.getSettings(),
+    ]) {
+      const m = mockFetch({ status: 502 });
+      await catchError(run(makeClient(m.fetch)));
+      expect(m.calls).toHaveLength(1);
+    }
   });
 });

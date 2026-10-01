@@ -11,7 +11,12 @@ export const FAKE_CREDS = {
 } as const;
 
 export type MockReply =
-  | { status?: number; body?: string | object | null; delayMs?: number }
+  | {
+      status?: number;
+      body?: string | object | null;
+      delayMs?: number;
+      headers?: Record<string, string>;
+    }
   | { throws: unknown }
   | { hang: true };
 
@@ -47,9 +52,9 @@ export function mockFetch(...replies: MockReply[]) {
       await abortable(reply.delayMs);
     }
     if ('hang' in reply) throw new Error('unreachable');
-    const { status = 200, body = '' } = reply;
+    const { status = 200, body = '', headers } = reply;
     const text = body === null ? 'null' : typeof body === 'string' ? body : JSON.stringify(body);
-    return new Response(status === 204 ? null : text, { status });
+    return new Response(status === 204 ? null : text, headers ? { status, headers } : { status });
   });
   return { fetch: fn as unknown as typeof fetch, calls };
 }
@@ -63,8 +68,27 @@ export function recordingLogger() {
   return { logger, lines };
 }
 
+/**
+ * Инъектируемая пауза для встроенных повторов: не ждёт реально, записывает длительности,
+ * уважает AbortSignal (уже отменённый — отказ).
+ */
+export function recordingSleep() {
+  const delays: number[] = [];
+  const sleep = (ms: number, signal?: AbortSignal): Promise<void> => {
+    delays.push(ms);
+    return signal?.aborted ? Promise.reject(new Error('aborted')) : Promise.resolve();
+  };
+  return { sleep, delays };
+}
+
+/** Клиент на моках. По умолчанию паузы повторов мгновенные (`recordingSleep`). */
 export function makeClient(fetchImpl: typeof fetch, extra: Partial<GreenApiClientConfig> = {}) {
-  return createGreenApiClient({ ...FAKE_CREDS, fetch: fetchImpl, ...extra });
+  return createGreenApiClient({
+    ...FAKE_CREDS,
+    fetch: fetchImpl,
+    sleep: recordingSleep().sleep,
+    ...extra,
+  });
 }
 
 /** Ловит отклонённый промис и возвращает ошибку (падает, если промис выполнился). */
