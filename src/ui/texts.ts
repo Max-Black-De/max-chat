@@ -12,6 +12,9 @@ export const UI_TEXTS = {
   advanced: 'Дополнительно',
   showToken: 'показать',
   hideToken: 'скрыть',
+  /** Не из ТЗ: подписи для скринридера (видимый текст — «показать» / «скрыть»). */
+  showTokenLabel: 'показать токен',
+  hideTokenLabel: 'скрыть токен',
   submit: 'Войти',
   submitting: 'Проверяем…',
   restoring: 'Восстанавливаем сессию…',

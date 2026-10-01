@@ -107,7 +107,8 @@ export function LoginScreen({ defaultApiUrl }: { defaultApiUrl: string }) {
               onClick={() => {
                 setShowToken((s) => !s);
               }}
-              aria-pressed={showToken}
+              aria-controls={ids.token}
+              aria-label={showToken ? UI_TEXTS.hideTokenLabel : UI_TEXTS.showTokenLabel}
               data-testid="login-token-toggle"
             >
               {showToken ? UI_TEXTS.hideToken : UI_TEXTS.showToken}

@@ -104,9 +104,15 @@ describe('экран входа (п. 1.1–1.2, §4.0 п. 1)', () => {
 
   it('кнопка «показать» переключает тип поля токена', () => {
     setup();
-    fireEvent.click(screen.getByTestId('login-token-toggle'));
+    const toggle = screen.getByTestId('login-token-toggle');
+    expect(toggle).toHaveTextContent('показать');
+    expect(toggle).toHaveAccessibleName('показать токен');
+    expect(toggle).toHaveAttribute('aria-controls', input('login-apiTokenInstance').id);
+    fireEvent.click(toggle);
     expect(input('login-apiTokenInstance').type).toBe('text');
-    fireEvent.click(screen.getByTestId('login-token-toggle'));
+    expect(toggle).toHaveTextContent('скрыть');
+    expect(toggle).toHaveAccessibleName('скрыть токен');
+    fireEvent.click(toggle);
     expect(input('login-apiTokenInstance').type).toBe('password');
   });
 
