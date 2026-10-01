@@ -78,6 +78,8 @@ const TZ = {
     'Не удалось проверить номер: нет связи с сервером GREEN-API. Проверьте соединение и нажмите «Создать» ещё раз',
   check429: 'Слишком много запросов. Подождите несколько секунд и нажмите «Создать» ещё раз',
   check5xx: 'Сервер GREEN-API временно не отвечает. Нажмите «Создать» ещё раз через минуту',
+  // §4.2 п. 2.6 (ВА-7, Д-3/EC-I9)
+  checkUnexpected: 'Не удалось проверить номер: неожиданный ответ сервера. Попробуйте позже',
   // §4.3 п. 3.4, 3.6 (ВА-9, ВА-10, ВА-20)
   sendSuspended: 'Аккаунт ограничен: отправка только контактам',
   sendUnknown:
@@ -141,6 +143,7 @@ describe('константы текстов совпадают с ТЗ поси�
     expect(CHECK_ACCOUNT_TEXTS.network).toBe(TZ.checkNet);
     expect(CHECK_ACCOUNT_TEXTS.rateLimited).toBe(TZ.check429);
     expect(CHECK_ACCOUNT_TEXTS.server).toBe(TZ.check5xx);
+    expect(CHECK_ACCOUNT_TEXTS.unexpectedResponse).toBe(TZ.checkUnexpected);
   });
 
   it('sendMessage (п. 3.4, 3.6) и квота (§5.5)', () => {
@@ -217,6 +220,8 @@ describe('describeError: checkAccount (п. 2.8, ВА-7, ВА-10)', () => {
     [C.SERVER, undefined, TZ.check5xx],
     [C.UNAUTHORIZED, undefined, TZ.unauthorized],
     [C.INSTANCE_EXPIRED, undefined, TZ.expired],
+    [C.UNEXPECTED_RESPONSE, 'exist=true with missing or malformed chatId', TZ.checkUnexpected],
+    [C.INVALID_JSON, 'body is not JSON', TZ.checkUnexpected],
   ])('%s %j → текст ТЗ', (code, reason, text) => {
     expect(describeError(e(code, reason), ctx)).toBe(text);
   });

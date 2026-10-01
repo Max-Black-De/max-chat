@@ -35,7 +35,10 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
   `Content-Type: application/json` только у POST; у GET и DELETE нет ни заголовков, ни тела (§5.1,
   без лишнего CORS-preflight на GET).
 - `checkAccount` принимает уже нормализованный номер (Р-10: `7XXXXXXXXXX` или `375XXXXXXXXX`) и шлёт его
-  **целым числом**. Нормализация ввода — в F3.
+  **целым числом**. Нормализация ввода — в F3. Ответ `exist:true` принимается, только если `chatId` — непустая
+  строка `^-?\d+$` (`isCheckAccountChatId`); число, `…@c.us`, буквы, пустая строка или нет `exist` →
+  `UNEXPECTED_RESPONSE` (битый JSON — `INVALID_JSON`), текст п. 2.6 «Не удалось проверить номер: неожиданный
+  ответ сервера…», без повтора (ВА-7, EC-I9). `exist:false` — штатный ответ.
 - `sendMessage`: `chatId` только из цифр (личный чат). Строка с `@` (`…@c.us`) и отрицательные id групп/каналов
   отклоняются **до запроса** (`INVALID_ARGUMENT`, §5.5, Р-26). Пустой/пробельный текст и > 4000 символов
   (длина = `text.length`, UTF-16: emoji = 2, ВА-14) — тоже. Текст уходит как есть, без trim.

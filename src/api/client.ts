@@ -110,6 +110,14 @@ export function validateSendChatId(chatId: unknown): string | null {
 }
 
 /**
+ * chatId из ответа checkAccount (п. 2.6, EC-I9): непустая строка `^-?\d+$`.
+ * Не строка (в том числе число), `…@c.us`, нецифровые символы — `false`.
+ */
+export function isCheckAccountChatId(chatId: unknown): chatId is string {
+  return typeof chatId === 'string' && /^-?\d+$/.test(chatId);
+}
+
+/**
  * Создаёт клиент. Токен хранится только в замыкании: у объекта клиента нет
  * поля с токеном, `toString`/`toJSON`/`util.inspect` возвращают `***`.
  */
@@ -357,20 +365,16 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
         );
       const fromCache = value.fromCache === true;
       if (!exist) return { exist: false, chatId: '', fromCache };
-      const rawChatId = value.chatId;
-      const chatId =
-        typeof rawChatId === 'string'
-          ? rawChatId
-          : typeof rawChatId === 'number' && Number.isSafeInteger(rawChatId)
-            ? String(rawChatId)
-            : '';
-      if (!chatId)
+      // п. 2.6 (ВА-7, EC-I9): chatId — только непустая строка из цифр (у групп — ведущий `-`).
+      // Число, `@c.us`, буквы, пустая строка — неожиданный ответ: без кеша и без повтора.
+      const chatId = value.chatId;
+      if (!isCheckAccountChatId(chatId))
         throw responseError(
           ctx,
           req,
           GreenApiErrorCode.UNEXPECTED_RESPONSE,
           status,
-          'exist=true without chatId',
+          'exist=true with missing or malformed chatId',
         );
       return { exist: true, chatId, fromCache };
     },

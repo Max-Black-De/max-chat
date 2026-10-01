@@ -13,7 +13,12 @@
 export type * from './types';
 export type * from './clientTypes';
 export * from './constants';
-export { createGreenApiClient, validateSendChatId, messageLength } from './client';
+export {
+  createGreenApiClient,
+  validateSendChatId,
+  isCheckAccountChatId,
+  messageLength,
+} from './client';
 export type { GreenApiClient, SendMessageParams } from './client';
 export {
   GreenApiError,

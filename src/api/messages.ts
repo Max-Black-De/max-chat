@@ -75,7 +75,7 @@ export const SETTINGS_TEXTS = {
 /** П-1 (обратная совместимость имени). */
 export const WEBHOOK_URL_SET_TEXT = SETTINGS_TEXTS.webhookUrlSet;
 
-/** checkAccount (§4.2 п. 2.7–2.8, ВА-7, ВА-10). */
+/** checkAccount (§4.2 п. 2.6–2.8, ВА-7, ВА-10, EC-I9). */
 export const CHECK_ACCOUNT_TEXTS = {
   notExists: 'На этом номере нет аккаунта MAX',
   tooManyChecks: 'Слишком много проверок номеров, повторите позже',
@@ -89,6 +89,8 @@ export const CHECK_ACCOUNT_TEXTS = {
     'Не удалось проверить номер: нет связи с сервером GREEN-API. Проверьте соединение и нажмите «Создать» ещё раз',
   rateLimited: 'Слишком много запросов. Подождите несколько секунд и нажмите «Создать» ещё раз',
   server: 'Сервер GREEN-API временно не отвечает. Нажмите «Создать» ещё раз через минуту',
+  /** п. 2.6 (ВА-7, EC-I9): `exist:true` с плохим chatId, нет `exist`, битый JSON. */
+  unexpectedResponse: 'Не удалось проверить номер: неожиданный ответ сервера. Попробуйте позже',
 } as const;
 
 /** Максимум символов текста сервера в «Ошибка в запросе: …» (п. 2.8). */
@@ -259,6 +261,9 @@ export function describeError(error: unknown, context: ErrorContext): string {
           return CHECK_ACCOUNT_TEXTS.rateLimited;
         case C.SERVER:
           return CHECK_ACCOUNT_TEXTS.server;
+        case C.UNEXPECTED_RESPONSE:
+        case C.INVALID_JSON:
+          return CHECK_ACCOUNT_TEXTS.unexpectedResponse;
         default:
           return FALLBACK_TEXTS.generic;
       }

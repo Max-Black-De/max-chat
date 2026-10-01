@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GreenApiError, GreenApiErrorCode } from '../errors';
-import { messageLength } from '../client';
+import { isCheckAccountChatId, messageLength } from '../client';
 import {
   incomingChannelImage,
   incomingGroupTextQuoted,
@@ -78,10 +78,68 @@ describe('checkAccount', () => {
     },
   );
 
-  it('exist:true без chatId → UNEXPECTED_RESPONSE', async () => {
-    const c = makeClient(mockFetch({ body: { exist: true } }).fetch);
-    const e = (await catchError(c.checkAccount('79991234567'))) as GreenApiError;
+  // п. 2.6, ВА-7, EC-I9: только непустая строка ^-?\d+$; без кеша (у клиента его нет) и без повтора.
+  it.each<[string, object]>([
+    ['нет chatId', { exist: true }],
+    ['chatId с @ (номер@c.us)', { exist: true, chatId: '79990000000@c.us' }],
+    ['нецифровой chatId', { exist: true, chatId: 'abc' }],
+    ['цифры с мусором', { exist: true, chatId: '10000000x' }],
+    ['одинокий минус', { exist: true, chatId: '-' }],
+    ['chatId числом', { exist: true, chatId: 10000000 }],
+    ['пустая строка', { exist: true, chatId: '' }],
+    ['chatId null', { exist: true, chatId: null }],
+    ['нет exist', { chatId: '10000000' }],
+    ['пустой объект', {}],
+    ['exist строкой', { exist: 'true', chatId: '10000000' }],
+  ])('%s → UNEXPECTED_RESPONSE, один запрос, retry none', async (_name, body) => {
+    const m = mockFetch({ body }, { body: { exist: true, chatId: '10000000' } });
+    const e = (await catchError(makeClient(m.fetch).checkAccount('79991234567'))) as GreenApiError;
+    expect(e).toBeInstanceOf(GreenApiError);
     expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
+    expect(e.retry).toBe('none');
+    expect(m.calls).toHaveLength(1);
+  });
+
+  it('битый JSON → INVALID_JSON без повтора', async () => {
+    const m = mockFetch({ body: '{"exist":true,' });
+    const e = (await catchError(makeClient(m.fetch).checkAccount('79991234567'))) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.INVALID_JSON);
+    expect(e.retry).toBe('none');
+    expect(m.calls).toHaveLength(1);
+  });
+
+  it('chatId группы с ведущим минусом — допустим (п. 2.6)', async () => {
+    const c = makeClient(mockFetch({ body: { exist: true, chatId: '-10000000' } }).fetch);
+    await expect(c.checkAccount('79991234567')).resolves.toEqual({
+      exist: true,
+      chatId: '-10000000',
+      fromCache: false,
+    });
+  });
+
+  it('exist:false — штатный ответ, chatId не проверяется', async () => {
+    const c = makeClient(mockFetch({ body: { exist: false, chatId: 'abc' } }).fetch);
+    await expect(c.checkAccount('79991234567')).resolves.toEqual({
+      exist: false,
+      chatId: '',
+      fromCache: false,
+    });
+  });
+
+  it('isCheckAccountChatId', () => {
+    expect(isCheckAccountChatId('10000000')).toBe(true);
+    expect(isCheckAccountChatId('-10000000')).toBe(true);
+    for (const bad of [
+      '',
+      '-',
+      '79990000000@c.us',
+      'abc',
+      ' 10000000',
+      '10000000 ',
+      10000000,
+      null,
+    ])
+      expect(isCheckAccountChatId(bad)).toBe(false);
   });
 });
 
