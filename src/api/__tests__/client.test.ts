@@ -8,7 +8,14 @@ import {
   outgoingApiExtendedText,
   outgoingPhoneText,
 } from '../../test/fixtures/apiNotifications';
-import { catchError, makeClient, mockFetch, blockRealNetwork, callAt, bodyText } from './helpers';
+import {
+  catchError,
+  makeClient,
+  mockFetch,
+  blockRealNetwork,
+  callAt,
+  bodyText,
+} from '../../test/apiHelpers';
 
 blockRealNetwork();
 

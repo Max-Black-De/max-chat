@@ -15,7 +15,7 @@ import {
   mockFetch,
   recordingSleep,
   type MockReply,
-} from './helpers';
+} from '../../test/apiHelpers';
 
 blockRealNetwork();
 afterEach(() => {

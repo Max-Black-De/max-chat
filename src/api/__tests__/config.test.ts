@@ -11,7 +11,7 @@ import {
   catchError,
   makeClient,
   mockFetch,
-} from './helpers';
+} from '../../test/apiHelpers';
 
 blockRealNetwork();
 

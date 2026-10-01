@@ -9,7 +9,14 @@ import {
 import { DEFAULT_API_URL } from '../constants';
 import { GreenApiError, GreenApiErrorCode } from '../errors';
 import { createGreenApiClient } from '../client';
-import { FAKE_CREDS, FAKE_TOKEN, makeClient, mockFetch, blockRealNetwork, callAt } from './helpers';
+import {
+  FAKE_CREDS,
+  FAKE_TOKEN,
+  makeClient,
+  mockFetch,
+  blockRealNetwork,
+  callAt,
+} from '../../test/apiHelpers';
 
 blockRealNetwork();
 

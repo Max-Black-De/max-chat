@@ -14,7 +14,7 @@ import {
   type MockReply,
   blockRealNetwork,
   callAt,
-} from './helpers';
+} from '../../test/apiHelpers';
 
 blockRealNetwork();
 

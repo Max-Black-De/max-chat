@@ -134,6 +134,7 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 `src/api/__tests__/`: `url`, `client`, `config`, `errors`, `quota`, `masking`, `messages`, `phone`, `retries`,
 `session`
 (+ `src/notifications/extractText.test.ts`). `fetch` — всегда мок, глобальный `fetch` в этих тестах бросает
-исключение (`blockRealNetwork()`). Фикстуры `src/test/fixtures/notifications.ts` (общие для api, notifications, polling) — обезличенные структуры
+исключение (`blockRealNetwork()`). Общие помощники (fetch-мок, `makeClient`, `catchGreenApiError`, условные
+учётные данные с токеном-заглушкой `TEST-TOKEN-placeholder-not-a-secret`) — `src/test/apiHelpers.ts`. Фикстуры `src/test/fixtures/notifications.ts` (общие для api, notifications, polling) — обезличенные структуры
 реальных уведомлений (все значения условные) + синтетические по документации (личное входящее, `quotaExceeded`,
 466 в трёх форматах); `satisfies ReceivedNotification` сверяет контракт `types.ts` с реальными данными.

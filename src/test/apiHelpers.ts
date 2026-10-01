@@ -1,9 +1,13 @@
 import { beforeEach, vi } from 'vitest';
-import { createGreenApiClient } from '../client';
-import type { GreenApiClientConfig, GreenApiLogger } from '../clientTypes';
+import { createGreenApiClient } from '../api/client';
+import type { GreenApiClientConfig, GreenApiLogger } from '../api/clientTypes';
 
-/** Условные учётные данные. Токен — заведомо фиктивный, но «похож» на настоящий для проверок маскирования. */
-export const FAKE_TOKEN = 'f4k3t0k3n0000000000000000000000000000000000000abcd';
+/**
+ * Общие помощники тестов клиента GREEN-API (fetch-мок, логгер, пауза), см. `src/api/__tests__`.
+ * Условные учётные данные: токен — явная заглушка, не похожая на секрет (публичный репозиторий,
+ * gitleaks и verify:dist, НФТ-11). Значение то же, что в `src/test/fixtures` F2.
+ */
+export const FAKE_TOKEN = 'TEST-TOKEN-placeholder-not-a-secret';
 export const FAKE_CREDS = {
   apiUrl: 'https://api.example.test/',
   idInstance: '110000000042',

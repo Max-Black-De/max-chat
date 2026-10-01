@@ -1,4 +1,4 @@
-import { blockRealNetwork } from './helpers';
+import { blockRealNetwork } from '../../test/apiHelpers';
 import { describe, expect, it } from 'vitest';
 import { GreenApiError, GreenApiErrorCode as C, type GreenApiErrorCode } from '../errors';
 import { GreenApiQuotaError } from '../errors';

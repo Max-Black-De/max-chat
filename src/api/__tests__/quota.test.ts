@@ -8,7 +8,13 @@ import {
   quotaExceededNotification,
   quotaExceededNotificationMinimal,
 } from '../../test/fixtures/apiNotifications';
-import { catchError, makeClient, mockFetch, recordingLogger, blockRealNetwork } from './helpers';
+import {
+  catchError,
+  makeClient,
+  mockFetch,
+  recordingLogger,
+  blockRealNetwork,
+} from '../../test/apiHelpers';
 
 blockRealNetwork();
 
