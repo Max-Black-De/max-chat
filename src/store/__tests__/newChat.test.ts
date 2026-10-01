@@ -7,7 +7,7 @@ import {
   type GreenApiClient,
 } from '../../api';
 import { createInitialChatsState, type ChatsState } from '../chats';
-import { resolveNewChat } from '../newChat';
+import { CHECK_ACCOUNT_TIMEOUT_MS, resolveNewChat } from '../newChat';
 import { SESSION_TEXTS } from '../texts';
 import {
   TEST_API_URL,
@@ -249,6 +249,38 @@ describe('ответы checkAccount (п. 2.6–2.8, §5.5, ВА-7, ВА-10)', ()
     });
     ctrl.abort();
     expect(await p).toEqual({ ok: false, reason: 'aborted', error: '', phone: TEST_PHONE });
+  });
+
+  it('п. 2.5: таймаут 15 с — текст «сеть/таймаут», запрос прерван, без автоповтора', async () => {
+    const api = routeFetch({ checkAccount: [{ hang: true }] });
+    const scheduled: { fn: () => void; ms: number }[] = [];
+    const client = createGreenApiClient({
+      apiUrl: TEST_API_URL,
+      idInstance: TEST_ID_INSTANCE,
+      apiTokenInstance: TEST_TOKEN,
+      fetch: api.fetch,
+      sleep: () => Promise.resolve(),
+      timers: {
+        setTimeout: (fn, ms) => scheduled.push({ fn, ms }),
+        clearTimeout: () => undefined,
+      },
+    });
+    const p = resolveNewChat(TEST_PHONE, { state: empty, client, canWrite: true });
+    await vi.waitFor(() => {
+      expect(api.callsOf('checkAccount')).toHaveLength(1);
+    });
+    expect(CHECK_ACCOUNT_TIMEOUT_MS).toBe(15_000);
+    const timeout = scheduled.find((t) => t.ms === CHECK_ACCOUNT_TIMEOUT_MS);
+    if (!timeout) throw new Error('таймаут 15 с не запланирован');
+    timeout.fn();
+    expect(await p).toEqual({
+      ok: false,
+      reason: 'api',
+      error: CHECK_ACCOUNT_TEXTS.network,
+      phone: TEST_PHONE,
+    });
+    expect(api.callsOf('checkAccount')[0]?.init.signal?.aborted).toBe(true);
+    expect(api.callsOf('checkAccount')).toHaveLength(1);
   });
 
   it('клиент закрыт (выход во время запроса) — aborted', async () => {

@@ -9,7 +9,7 @@ import { ChatsProvider } from './ChatsProvider';
 import { ChatList } from './ChatList';
 import { ChatPane } from './ChatPane';
 import { SessionProvider } from '../session/SessionProvider';
-import { SEND_TEXTS } from '../../api';
+import { CHECK_ACCOUNT_TEXTS, SEND_TEXTS } from '../../api';
 import { SESSION_CREDENTIALS_KEY } from '../../store';
 import {
   OK_SETTINGS,
@@ -62,6 +62,8 @@ interface SetupOptions {
   local?: ReturnType<typeof memoryStorage>;
   idInstance?: string;
   deps?: Partial<SessionProviderDeps>;
+  /** Таймеры клиента F1 (таймауты запросов). */
+  timers?: { setTimeout: (fn: () => void, ms: number) => number; clearTimeout: () => void };
 }
 
 /** Основной экран через восстановление сессии из sessionStorage (п. 1.9). */
@@ -80,7 +82,11 @@ async function openMain(opts: SetupOptions = {}) {
   const local = opts.local ?? memoryStorage();
   const warn = vi.fn();
   const deps: SessionProviderDeps = {
-    clientOptions: { fetch: api.fetch, sleep: () => Promise.resolve() },
+    clientOptions: {
+      fetch: api.fetch,
+      sleep: () => Promise.resolve(),
+      ...(opts.timers ? { timers: opts.timers } : {}),
+    },
     credentialsBackend: session,
     storageBackend: local,
     warn,
@@ -377,6 +383,37 @@ describe('«Новый чат» (ОР-2, §4.0 п. 3)', () => {
       [TEST_PHONE]: TEST_CHAT_ID,
       [TEST_PHONE_2]: TEST_CHAT_ID,
     });
+  });
+
+  it('п. 2.5: checkAccount висит — через 15 с текст «сеть/таймаут», «Отмена» и Esc снова работают', async () => {
+    const scheduled: { fn: () => void; ms: number }[] = [];
+    const timers = {
+      setTimeout: (fn: () => void, ms: number) => scheduled.push({ fn, ms }),
+      clearTimeout: () => undefined,
+    };
+    const { api } = await openMain({ routes: { checkAccount: [{ hang: true }] }, timers });
+    openDialog();
+    submitPhone(TEST_PHONE);
+    await waitFor(() => {
+      expect(api.callsOf('checkAccount')).toHaveLength(1);
+    });
+    expect(screen.getByTestId('new-chat-cancel')).toBeDisabled();
+    fireEvent.keyDown(screen.getByTestId('new-chat-dialog'), { key: 'Escape' });
+    expect(screen.getByTestId('new-chat-dialog')).toBeInTheDocument();
+    const timeout = scheduled.find((t) => t.ms === 15_000);
+    if (!timeout) throw new Error('таймаут checkAccount 15 с не запланирован');
+    act(() => {
+      timeout.fn();
+    });
+    expect(await screen.findByTestId('new-chat-error')).toHaveTextContent(
+      CHECK_ACCOUNT_TEXTS.network,
+    );
+    expect(screen.getByTestId('new-chat-cancel')).toBeEnabled();
+    expect(screen.getByTestId('new-chat-submit')).toBeEnabled();
+    expect(screen.getByTestId<HTMLInputElement>('new-chat-phone').value).toBe(TEST_PHONE);
+    expect(api.callsOf('checkAccount')).toHaveLength(1);
+    fireEvent.keyDown(screen.getByTestId('new-chat-dialog'), { key: 'Escape' });
+    expect(screen.queryByTestId('new-chat-dialog')).toBeNull();
   });
 
   it('EC-U7: двойное «Создать» — один запрос, кнопка и «Отмена» неактивны во время запроса', async () => {

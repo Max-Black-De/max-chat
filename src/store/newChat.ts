@@ -5,6 +5,8 @@
  * - Номер нормализуется (Р-10); невалидный — ошибка формата, запроса нет (п. 2.3).
  * - Номер в кеше «номер → chatId» — checkAccount **не вызывается** (п. 2.4, EC-D10, НФТ-6).
  * - Иначе — один checkAccount, **без автоповтора** при любой ошибке (п. 2.8, ВА-7, EC-Q7).
+ *   Таймаут запроса — 15 с (п. 2.5, v1.3.6): клиент F1 прерывает fetch своим AbortController и
+ *   бросает `TIMEOUT`, текст — «сеть/таймаут» из п. 2.8, и диалог снова управляем.
  * - `exist:false` — «На этом номере нет аккаунта MAX» (п. 2.7). Неожиданный ответ (EC-I9) —
  *   клиент F1 бросает `UNEXPECTED_RESPONSE`, текст п. 2.6. В обоих случаях кеш не пишется.
  * - Вкладка только на чтение не создаёт чатов (Р-12, EC-S4).
@@ -45,6 +47,9 @@ export type NewChatResult =
     }
   | { ok: false; reason: NewChatFailure; error: string; phone?: string };
 
+/** Таймаут checkAccount (п. 2.5, v1.3.6): дальше текст «сеть/таймаут», диалог не висит. */
+export const CHECK_ACCOUNT_TIMEOUT_MS = 15_000;
+
 export interface NewChatDeps {
   state: Pick<ChatsState, 'chats' | 'phoneCache'>;
   /** Клиент сессии (`controller.getClient()`); `null` — сессии нет. */
@@ -64,7 +69,10 @@ export async function resolveNewChat(input: string, deps: NewChatDeps): Promise<
   if (cached) return { ok: true, phone, chatId: cached.chatId, fromCache: true };
 
   try {
-    const res = await deps.client.checkAccount(phone, deps.signal ? { signal: deps.signal } : {});
+    const res = await deps.client.checkAccount(phone, {
+      timeoutMs: CHECK_ACCOUNT_TIMEOUT_MS,
+      ...(deps.signal ? { signal: deps.signal } : {}),
+    });
     if (!res.exist)
       return { ok: false, reason: 'notExists', error: CHECK_ACCOUNT_TEXTS.notExists, phone };
     return { ok: true, phone, chatId: res.chatId, fromCache: false };
