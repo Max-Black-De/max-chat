@@ -82,6 +82,9 @@ export interface GreenApiClient {
 
 const INSPECT = Symbol.for('nodejs.util.inspect.custom');
 
+/** `{"receiptId": <int>` в самом начале тела — для удаления уведомления с битым JSON (§5.4, ВА-18). */
+const LEADING_RECEIPT_ID = /^\s*\{\s*"receiptId"\s*:\s*(\d{1,15})(?![\d.eE])/;
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -450,7 +453,8 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
       if (!res.text.trim()) return null;
       const parsed = parseJson(res.text);
       if (!parsed.ok) {
-        const m = /"receiptId"\s*:\s*(\d{1,15})\b/.exec(res.text);
+        // receiptId — только ведущий ключ объекта (ВА-18): вложенный `"receiptId"` из body не берём.
+        const m = LEADING_RECEIPT_ID.exec(res.text);
         // В лог — только код и длина тела (ВА-18).
         throw responseError(
           ctx,

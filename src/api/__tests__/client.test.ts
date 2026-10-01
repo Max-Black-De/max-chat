@@ -291,6 +291,24 @@ describe('receiveNotification (§5.2)', () => {
     expect(e.retry).toBe('backoff');
   });
 
+  it.each<[string, number | undefined]>([
+    ['{"body":{"x":{"receiptId":9}},"receiptId":10', undefined],
+    ['{"typeWebhook":"x","receiptId":10,', undefined],
+    ['[{"receiptId":5}', undefined],
+    ['garbage {"receiptId":5,', undefined],
+    ['{"receiptId":"5",', undefined],
+    ['{"receiptId":1.5,', undefined],
+    ['{"receiptId":12e3,', undefined],
+    ['  {\n  "receiptId" :  12 , "body": {"receiptId": 9', 12],
+    ['{"receiptId":10,"body":{"x":{"receiptId":9}', 10],
+  ])('битый JSON %j: receiptId только из ведущего ключа → %s (ВА-18)', async (body, expected) => {
+    const c = makeClient(mockFetch({ body }).fetch);
+    const e = (await catchError(c.receiveNotification())) as GreenApiError;
+    expect(e.code).toBe(GreenApiErrorCode.INVALID_JSON);
+    expect(e.receiptId).toBe(expected);
+    expect(e.retry).toBe('backoff');
+  });
+
   it('невалидный receiptId → UNEXPECTED_RESPONSE', async () => {
     const c = makeClient(mockFetch({ body: '{"receiptId":"abc","body":{}}' }).fetch);
     const e = (await catchError(c.receiveNotification())) as GreenApiError;
