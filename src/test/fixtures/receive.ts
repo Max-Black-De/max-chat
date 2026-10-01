@@ -43,9 +43,18 @@ export const emptyReceiveResponses = {
   noContent: emptyResponse(204),
 } as const satisfies Record<string, MockHttpResponse>;
 
-/** ВА-18: непустой не-JSON — это ошибка с backoff, а не «нет уведомления». */
+/** Непустой ответ receive, который не разбирается как JSON (ТЗ §5.4). */
 export const nonJsonReceiveResponses = {
+  /**
+   * §5.4, ВА-18: весь ответ — не JSON, `receiptId` нет, удалять нечего → ошибка,
+   * backoff 1 → … → 30 с, в лог только код и длина.
+   */
   html: errorResponses.htmlInsteadOfJson200,
+  /**
+   * §5.4 «Невалидный JSON или неожиданная структура body»: тело оборвано, но ведущий
+   * `receiptId` (1) читается → залогировать тип, удалить уведомление **без паузы**
+   * и продолжать цикл. Это не ветка ВА-18: backoff здесь нет.
+   */
   truncatedJson: errorResponses.truncatedJson200,
 } as const satisfies Record<string, MockHttpResponse>;
 

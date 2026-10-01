@@ -126,7 +126,10 @@ export const errorResponses = {
   receiptIdNotNumber400: both(400, ERROR_TEXTS.receiptIdNotNumber),
 
   // --- битый JSON ---------------------------------------------------------------
-  /** JSON-заголовок, но тело обрывается. */
+  /**
+   * JSON-заголовок, тело обрывается, но ведущий `receiptId` читается. На receive по §5.4 —
+   * лог типа и delete без паузы (не backoff ВА-18); на других методах — ошибка формата.
+   */
   truncatedJson200: rawJsonResponse('{"receiptId": 1, "body": {"typeWebhook": "incomingMes'),
   /** ВА-18: весь ответ receive — непустой не-JSON → ошибка с backoff. */
   htmlInsteadOfJson200: htmlResponse('<html><body>Service page</body></html>', 200),
