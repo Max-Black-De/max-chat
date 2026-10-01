@@ -12,10 +12,17 @@
 import {
   GreenApiErrorCode,
   isGreenApiError,
+  isQuotaError,
   isSessionInvalidError,
   type GreenApiClient,
 } from '../api';
-import { BACKOFF_INITIAL_MS, BACKOFF_MAX_MS, NOT_AUTHORIZED_PAUSE_MS } from './constants';
+import {
+  BACKOFF_INITIAL_MS,
+  BACKOFF_MAX_MS,
+  EMPTY_RECEIVE_MIN_MS,
+  EMPTY_RECEIVE_PAUSE_MS,
+  NOT_AUTHORIZED_PAUSE_MS,
+} from './constants';
 
 /** Почему цикл остановился. */
 export type PollStopReason =
@@ -115,6 +122,8 @@ export interface PollLoopOptions {
   sleep?: PollSleep;
   /** Лог без персональных данных: только коды, статусы, тип уведомления. */
   warn?: PollWarn;
+  /** Часы, мс (для тестов). По умолчанию `Date.now`. */
+  now?: () => number;
 }
 
 /** Безопасные для лога поля ошибки API: без текста сервера, URL и номеров. */
@@ -136,11 +145,15 @@ export async function runPollLoop(options: PollLoopOptions): Promise<PollStopRea
   const isCurrent = options.isCurrent ?? (() => true);
   const sleep = options.sleep ?? abortableSleep;
   const warn = options.warn ?? (() => undefined);
+  const now = options.now ?? (() => Date.now());
   const alive = () => !signal.aborted && isCurrent();
   let failures = 0;
 
-  /** `null` — продолжать, иначе — остановиться с этой причиной. */
-  async function remove(receiptId: number): Promise<PollStopReason | null> {
+  /**
+   * `null` — продолжать, `backoff` — пауза перед следующим receive (466 на delete — событие
+   * очереди, §5.4, v1.3.7), иначе — остановиться с этой причиной.
+   */
+  async function remove(receiptId: number): Promise<PollStopReason | 'backoff' | null> {
     try {
       // Повторы (1 → 2 → 4 с), «уже удалено» и 500 findUnAckedMessage — внутри клиента (ВА-17).
       await client.deleteNotification(receiptId, { signal });
@@ -149,10 +162,18 @@ export async function runPollLoop(options: PollLoopOptions): Promise<PollStopRea
       if (!alive()) return 'aborted';
       const action = classifyReceiveError(e);
       if (action.kind === 'stop') return action.reason;
-      // После неудачных повторов — следующий receive; повтор уведомления погасит дедуп (EC-P4).
       warn('GREEN-API deleteNotification failed', errorForLog(e));
+      if (isQuotaError(e)) return 'backoff';
+      // После неудачных повторов — следующий receive; повтор уведомления погасит дедуп (EC-P4).
       return null;
     }
+  }
+
+  /** Удалить и решить, что дальше: `null` — продолжать, иначе — стоп. */
+  async function removeAndContinue(receiptId: number): Promise<PollStopReason | null> {
+    const next = await remove(receiptId);
+    if (next !== 'backoff') return next;
+    return (await pause(backoffDelay(failures++))) ? null : 'aborted';
   }
 
   async function pause(ms: number): Promise<boolean> {
@@ -166,6 +187,7 @@ export async function runPollLoop(options: PollLoopOptions): Promise<PollStopRea
 
   while (alive()) {
     let received: Awaited<ReturnType<typeof client.receiveNotification>>;
+    const startedAt = now();
     try {
       received = await client.receiveNotification({ signal });
     } catch (e) {
@@ -175,7 +197,7 @@ export async function runPollLoop(options: PollLoopOptions): Promise<PollStopRea
       if (action.kind === 'delete') {
         failures = 0;
         warn('GREEN-API notification is not JSON, deleted', { type: 'invalidJson' });
-        const stop = await remove(action.receiptId);
+        const stop = await removeAndContinue(action.receiptId);
         if (stop) return stop;
         continue;
       }
@@ -187,15 +209,20 @@ export async function runPollLoop(options: PollLoopOptions): Promise<PollStopRea
     }
     if (!alive()) return 'aborted';
     failures = 0;
-    // Пустой ответ — сразу следующий receive (EC-P1).
-    if (received === null) continue;
+    if (received === null) {
+      // Пустой ответ — следующий receive (EC-P1). Пришёл быстрее 1 с — сервер не держит long
+      // polling: пауза 1 с одним таймером после завершения запроса (§6.1 п. 2.2, п. 5; v1.3.7).
+      if (now() - startedAt < EMPTY_RECEIVE_MIN_MS && !(await pause(EMPTY_RECEIVE_PAUSE_MS)))
+        return 'aborted';
+      continue;
+    }
     try {
       await handle(received.body);
     } catch (e) {
       warn('Notification handler failed', { error: e instanceof Error ? e.name : 'unknown' });
     }
     if (!alive()) return 'aborted';
-    const stop = await remove(received.receiptId);
+    const stop = await removeAndContinue(received.receiptId);
     if (stop) return stop;
   }
   return 'aborted';

@@ -46,8 +46,14 @@ interface Event {
   ms?: number;
 }
 
-function harness(script: { receive: readonly Step[]; delete?: readonly Step[] }) {
+function harness(script: {
+  receive: readonly Step[];
+  delete?: readonly Step[];
+  /** Сколько «длится» каждый запрос по часам цикла, мс (по умолчанию — мгновенно). */
+  latencyMs?: number;
+}) {
   const receive = [...script.receive];
+  let clock = 0;
   const del = [...(script.delete ?? [])];
   const events: Event[] = [];
   const handled: unknown[] = [];
@@ -90,6 +96,7 @@ function harness(script: { receive: readonly Step[]; delete?: readonly Step[] })
       }
       return await toFetchResult(step as MockReply);
     } finally {
+      clock += script.latencyMs ?? 0;
       if (isReceive) inFlight--;
       events.push({ kind: 'fetch-end', method, receiptId });
     }
@@ -111,10 +118,12 @@ function harness(script: { receive: readonly Step[]; delete?: readonly Step[] })
     options: {
       handle?: (body: unknown) => void | Promise<void>;
       sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+      now?: () => number;
     } = {},
   ): Promise<PollStopReason> {
     return runPollLoop({
       client,
+      now: options.now ?? (() => clock),
       signal: controller.signal,
       isCurrent: () => current,
       handle:
@@ -172,9 +181,9 @@ afterEach(() => {
 
 describe('runPollLoop: receive → handle → delete (§6.1)', () => {
   it.each(Object.entries(emptyReceiveResponses))(
-    'пустой ответ (%s) → сразу следующий receive, delete не вызывается (EC-P1)',
+    'пустой ответ (%s) после long polling → сразу следующий receive, delete не вызывается (EC-P1)',
     async (_name, reply) => {
-      const h = harness({ receive: [reply, reply] });
+      const h = harness({ receive: [reply, reply], latencyMs: 1500 });
       expect(await drain(h)).toBe('aborted');
       expect(h.receives()).toBe(3);
       expect(h.deletes()).toEqual([]);
@@ -182,6 +191,52 @@ describe('runPollLoop: receive → handle → delete (§6.1)', () => {
       expect(h.sleeps()).toEqual([]);
     },
   );
+
+  it('пустой ответ быстрее 1 с → пауза 1 с после завершения запроса (§6.1 п. 2.2, v1.3.7)', async () => {
+    const empty = emptyReceiveResponses.emptyBody;
+    const h = harness({ receive: [empty, empty, note(40)] });
+    await drain(h);
+    expect(h.sleeps()).toEqual([1000, 1000]);
+    expect(h.deletes()).toEqual([40]);
+    // Каждая пауза — сразу после завершённого receive, до следующего.
+    h.events.forEach((e, i) => {
+      if (e.kind === 'sleep') expect(h.events[i - 1]).toMatchObject({ kind: 'fetch-end' });
+    });
+  });
+
+  it.each([
+    [999, [1000]],
+    [1000, []],
+  ])('граница: пустой ответ за %i мс → паузы %j', async (latencyMs, expected) => {
+    const h = harness({ receive: [emptyReceiveResponses.jsonNull], latencyMs });
+    await drain(h);
+    expect(h.sleeps()).toEqual(expected);
+  });
+
+  it('пауза после быстрого пустого ответа — один таймер на 1 с (фейковые таймеры, EC-P17)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'Date'] });
+    const original = Object.getOwnPropertyDescriptor(AbortSignal, 'timeout');
+    // Без AbortSignal.timeout пауза — ровно один setTimeout, его видно фейковым таймерам.
+    Object.defineProperty(AbortSignal, 'timeout', { value: undefined, configurable: true });
+    try {
+      const h = harness({ receive: [emptyReceiveResponses.emptyBody] });
+      const run = h.run({ sleep: abortableSleep, now: () => Date.now() });
+      await vi.waitFor(() => {
+        expect(vi.getTimerCount()).toBe(1);
+      });
+      expect(h.receives()).toBe(1);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(h.receives()).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => {
+        expect(h.receives()).toBe(2);
+      });
+      h.controller.abort();
+      expect(await run).toBe('aborted');
+    } finally {
+      if (original) Object.defineProperty(AbortSignal, 'timeout', original);
+    }
+  });
 
   it('уведомление → handle(body) → delete с тем же receiptId → следующий receive', async () => {
     const h = harness({ receive: [note(41)] });
@@ -359,6 +414,16 @@ describe('runPollLoop: delete (§5.4, ВА-17)', () => {
     await drain(h);
     expect(h.deletes()).toEqual([50, 51]);
     expect(h.warnings).toEqual([]);
+  });
+
+  it('466 на delete → backoff перед следующим receive (событие очереди, §5.4, v1.3.7)', async () => {
+    const quota = quota466Cases.correspondentsStatus.response;
+    const h = harness({ receive: [note(55), note(56)], delete: [quota] });
+    await drain(h);
+    expect(h.deletes()).toEqual([55, 56]);
+    expect(h.clientSleeps()).toEqual([]);
+    expect(h.sleeps()).toEqual([1000]);
+    expect(h.warnings.map((w) => w.message)).toEqual(['GREEN-API deleteNotification failed']);
   });
 
   it('400 custom webhook url на delete → стоп (EC-P12)', async () => {
