@@ -10,6 +10,12 @@ import {
 } from '../messagesStorage';
 import { createAppStorage } from '../storage';
 import { memoryStorage } from '../../test/fixtures/greenApiMock';
+import { FOREIGN_ID_INSTANCE, ID_INSTANCE } from '../../test/fixtures/constants';
+import {
+  STORAGE_KEY_PREFIX,
+  corruptedStorageValues,
+  legacyStorageKey,
+} from '../../test/fixtures/storage';
 import {
   TEST_CHAT_ID,
   TEST_CHAT_ID_2,
@@ -19,8 +25,8 @@ import {
   storedChats,
 } from '../../test/fixtures/chats';
 
-const ID = '1101000000';
-const OTHER_ID = '1101000001';
+const ID = ID_INSTANCE;
+const OTHER_ID = FOREIGN_ID_INSTANCE;
 
 function storageOf(
   initial: Record<string, string> = {},
@@ -65,11 +71,20 @@ describe('loadChats (Р-2, EC-D7, EC-D8)', () => {
     expect(loadChats(storage)).toEqual({ chats: [], phoneCache: {} });
   });
 
-  it('EC-D8: мусор, не тот тип, ключ без версии или другой версии — пусто, без исключений', () => {
+  it.each(Object.entries(corruptedStorageValues))(
+    'EC-D8: повреждённый раздел (%s) — пусто, без исключений',
+    (_name, value) => {
+      const { storage } = storageOf({
+        [lsKey('chats', ID)]: value,
+        [lsKey('phoneCache', ID)]: value,
+      });
+      expect(loadChats(storage)).toEqual({ chats: [], phoneCache: {} });
+    },
+  );
+
+  it('EC-D8: ключ без версии (старая схема) или другой версии не читается', () => {
     for (const initial of [
-      { [lsKey('chats', ID)]: '{not json', [lsKey('phoneCache', ID)]: '[]' },
-      { [lsKey('chats', ID)]: '"строка"', [lsKey('phoneCache', ID)]: 'null' },
-      { [`maxchat:${ID}:chats`]: JSON.stringify([chatFixture()]) },
+      { [legacyStorageKey]: JSON.stringify([chatFixture()]) },
       { [`maxchat:${ID}:v2:chats`]: JSON.stringify([chatFixture()]) },
     ]) {
       const { storage } = storageOf(initial);
@@ -103,7 +118,10 @@ describe('loadChats (Р-2, EC-D7, EC-D8)', () => {
     const { storage, backend } = storageOf();
     expect(saveChats(storage, [chatFixture()])).toBe(true);
     expect(savePhoneCache(storage, { [TEST_PHONE]: TEST_CHAT_ID })).toBe(true);
-    expect([...backend.map.keys()].sort()).toEqual([lsKey('chats', ID), lsKey('phoneCache', ID)]);
+    expect([...backend.map.keys()].sort()).toEqual([
+      `${STORAGE_KEY_PREFIX}chats`,
+      `${STORAGE_KEY_PREFIX}phoneCache`,
+    ]);
     expect(JSON.parse(backend.map.get(lsKey('chats', ID)) ?? '')).toEqual([chatFixture()]);
   });
 

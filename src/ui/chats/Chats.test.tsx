@@ -31,9 +31,11 @@ import {
   lsKey,
   storedChats,
 } from '../../test/fixtures/chats';
+import { FOREIGN_ID_INSTANCE } from '../../test/fixtures/constants';
+import { corruptedStorageValues } from '../../test/fixtures/storage';
 
 const CREDS = { idInstance: TEST_ID_INSTANCE, apiTokenInstance: TEST_TOKEN, apiUrl: TEST_API_URL };
-const OTHER_ID = '1101000001';
+const OTHER_ID = FOREIGN_ID_INSTANCE;
 
 const probe: { session: SessionContextValue | null; chats: ChatsContextValue | null } = {
   session: null,
@@ -191,7 +193,7 @@ describe('список чатов (§4.0 п. 2, п. 5.2, ВА-15)', () => {
   });
 
   it('EC-D8: битый раздел — пустой список, без падения', async () => {
-    const local = memoryStorage({ [lsKey('chats')]: '{"chats":[{"chatId":"10000000"' });
+    const local = memoryStorage({ [lsKey('chats')]: corruptedStorageValues.truncatedJson });
     await openMain({ local });
     expect(screen.getByTestId('chat-list-empty')).toBeInTheDocument();
   });
