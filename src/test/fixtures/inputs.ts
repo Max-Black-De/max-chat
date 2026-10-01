@@ -66,6 +66,9 @@ export const phoneInputs = {
   digitsOnly: { input: '79990000001', expected: '79990000001' },
   belarusFormatted: { input: '+375 (29) 000-00-01', expected: '375290000001' },
   belarusDigits: { input: '375290000001', expected: '375290000001' },
+  /** EC-I8: KZ-номер (+7 7xx) проходит формат как 11 цифр с 7. */
+  kazakhstanFormatted: { input: '+7 (799) 000-00-01', expected: '77990000001' },
+  kazakhstanEightPrefix: { input: '8 799 000 00 01', expected: '77990000001' },
   empty: { input: '', expected: null },
   tooShort: { input: '12345', expected: null },
   usNumber: { input: '+1 202 000 0001', expected: null },
@@ -80,6 +83,7 @@ export const phoneInputs = {
 export const chatTitleCases = {
   russia: { phone: '79990000001', title: '+7 999 000-00-01' },
   belarus: { phone: '375290000001', title: '+375 29 000-00-01' },
+  kazakhstan: { phone: '77990000001', title: '+7 799 000-00-01' },
 } as const;
 
 /** Тексты для ленты и поля ввода (ОР-3 п. 3.5, Р-16, ВА-14). */

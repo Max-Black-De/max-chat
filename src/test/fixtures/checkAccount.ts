@@ -22,6 +22,10 @@ export const checkAccountRequestNewRecipient = {
 export const checkAccountRequestBelarus = {
   phoneNumber: PHONES.belarus,
 } satisfies CheckAccountRequest;
+/** EC-I8, §3 п. 6 edge-cases: KZ-номер — только моки (реальная проверка = новый получатель). */
+export const checkAccountRequestKazakhstan = {
+  phoneNumber: PHONES.kazakhstan,
+} satisfies CheckAccountRequest;
 
 /** [проверено] Номер существует, ответ не из кеша сервера. */
 export const accountExists = {
@@ -77,6 +81,13 @@ export const checkStatusFalseLimit = {
   reason: 'User get contact info limit reached',
 } satisfies StatusFalseResponse;
 
+/** [вывод] KZ-номер найден: ответ той же формы, что и для РФ. */
+export const accountExistsKazakhstan = {
+  exist: true,
+  chatId: CHAT_IDS.kazakhstan,
+  fromCache: false,
+} satisfies CheckAccountResponse;
+
 export const checkAccountResponses = {
   exists: jsonResponse(accountExists),
   existsFromCache: jsonResponse(accountExistsFromCache),
@@ -84,6 +95,9 @@ export const checkAccountResponses = {
   existsSecondary: jsonResponse(accountExistsSecondary),
   existsNewRecipient: jsonResponse(accountExistsNewRecipient),
   notExists: jsonResponse(accountNotExists),
+  existsKazakhstan: jsonResponse(accountExistsKazakhstan),
+  /** KZ-номер без аккаунта MAX — тот же `exist:false`, текст C-10. */
+  notExistsKazakhstan: jsonResponse(accountNotExists),
   statusFalseStarting200: jsonResponse(checkStatusFalseStarting, 200),
   statusFalseStarting400: jsonResponse(checkStatusFalseStarting, 400),
   statusFalseLimit200: jsonResponse(checkStatusFalseLimit, 200),

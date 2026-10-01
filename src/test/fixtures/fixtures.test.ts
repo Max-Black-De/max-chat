@@ -29,6 +29,7 @@ const ALLOWED_NAMES = new Set<string>([...Object.values(fixtures.NAMES), '']);
 const ALLOWED_DIGIT_RUNS: readonly RegExp[] = [
   /^7?9990000\d{2,5}$/, // номера 7999000000x и их невалидные варианты
   /^3752900000\d{0,2}$/, // номер РБ
+  /^77990000\d{3}$/, // KZ-номер (+7 799, EC-I8)
   /^110100000[01]$/, // idInstance: свой и чужой (EC-I7)
   /^1000000\d$/, // личные chatId 10000000…10000009
   /^10000000000000\d{1,4}$/, // группы/каналы (15 цифр) и 18-значные idMessage
@@ -369,6 +370,24 @@ describe('fixtures: contract shapes (§5)', () => {
     expect(fixtures.foreignInstanceIncoming.senderData.chatId).toBe(fixtures.CHAT_IDS.primary);
     expect(Object.keys(fixtures.checkAccountUnexpectedResponses).length).toBeGreaterThanOrEqual(12);
     expect(fixtures.apiUrlHostCases.lookalikeSuffix.warn).toBe(true);
+  });
+
+  it('describe polling loop scenarios for Д-3 (EC-P4, EC-I7, EC-S7, EC-P17)', () => {
+    const s = fixtures.pollingScenarios;
+    expect(s.deleteTooManyRequests.delete).toHaveLength(4);
+    expect(s.deleteTooManyRequests.delete.every((r) => 'status' in r && r.status === 429)).toBe(
+      true,
+    );
+    expect(s.deleteTooManyRequests.expected.deleteDelaysSec).toEqual([1, 2, 4]);
+    expect(s.foreignInstance.expected.deleteReceiptIds).toEqual([62, 63, 64]);
+    expect(s.lateAfterLogout.expected.deleteReceiptIds).toEqual([]);
+    expect(s.timerRule.expected.receiveBackoffSec).toEqual(
+      fixtures.POLLING.backoffDelaysSec.slice(0, 2),
+    );
+    expect(fixtures.TIMER_RULES.setIntervalCalls).toBe(0);
+    expect(fixtures.phoneInputs.kazakhstanFormatted.expected).toBe(
+      String(fixtures.PHONES.kazakhstan),
+    );
   });
 
   it('reject http:// apiUrl and expired/deleted instance cases exist', () => {

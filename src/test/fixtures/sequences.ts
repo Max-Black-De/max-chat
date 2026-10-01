@@ -197,6 +197,18 @@ export const deleteRetrySequences = {
     expectedDelaysSec: [1],
     outcome: 'deleted',
   },
+  /** ТЗ v1.3.4 §5.4: 429 на delete входит в те же 3 повтора. */
+  tooManyRequestsAllFail: {
+    replies: [
+      tooManyRequestsResponses.noRetryAfter,
+      tooManyRequestsResponses.noRetryAfter,
+      tooManyRequestsResponses.noRetryAfter,
+      tooManyRequestsResponses.noRetryAfter,
+    ],
+    expectedCalls: 4,
+    expectedDelaysSec: [1, 2, 4],
+    outcome: 'next-receive',
+  },
   allFail: {
     replies: [
       errorResponses.badGateway502,
