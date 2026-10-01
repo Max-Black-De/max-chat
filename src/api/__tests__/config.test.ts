@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createGreenApiClient } from '../client';
 import { DEFAULT_API_URL } from '../constants';
-import { GreenApiErrorCode, type GreenApiError } from '../errors';
+import { GreenApiErrorCode } from '../errors';
 import { maskUrl } from '../mask';
+import type { GreenApiTimers } from '../clientTypes';
 import {
   FAKE_CREDS,
   FAKE_TOKEN,
@@ -11,6 +12,7 @@ import {
   catchError,
   makeClient,
   mockFetch,
+  asGreenApiError,
 } from '../../test/apiHelpers';
 
 blockRealNetwork();
@@ -68,8 +70,23 @@ describe('конфигурация клиента (A2, тестировщик)',
     await Promise.resolve();
     expect(pending.map((t) => t.ms)).toEqual([1234]);
     pending[0]?.fn();
-    expect(((await p) as GreenApiError).code).toBe(GreenApiErrorCode.TIMEOUT);
+    expect(asGreenApiError(await p).code).toBe(GreenApiErrorCode.TIMEOUT);
     expect(timers.clearTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('GreenApiTimers<H>: дескриптор любого типа возвращается в clearTimeout без приведения', async () => {
+    interface Handle {
+      n: number;
+    }
+    const cleared: Handle[] = [];
+    let next = 0;
+    const timers: GreenApiTimers<Handle> = {
+      setTimeout: () => ({ n: ++next }),
+      clearTimeout: (h) => cleared.push(h),
+    };
+    const c = makeClient(mockFetch({ body: { stateInstance: 'authorized' } }).fetch, { timers });
+    await c.getStateInstance();
+    expect(cleared).toEqual([{ n: 1 }]);
   });
 
   it('таймауты: per-call > конфиг > умолчание; receive — не меньше receiveTimeout + 10 с', async () => {

@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  type GreenApiError,
-  GreenApiErrorCode as C,
-  GreenApiSessionError,
-  isSessionInvalidError,
-} from '../errors';
+import { GreenApiErrorCode as C, GreenApiSessionError, isSessionInvalidError } from '../errors';
 import { messageLength, type GreenApiClient } from '../client';
 import { MAX_MESSAGE_LENGTH } from '../constants';
 import type { GreenApiLogger } from '../clientTypes';
@@ -16,6 +11,9 @@ import {
   mockFetch,
   recordingSleep,
   type MockReply,
+  asGreenApiError,
+  asSessionError,
+  catchGreenApiError,
 } from '../../test/apiHelpers';
 
 blockRealNetwork();
@@ -67,7 +65,7 @@ describe('«сессия невалидна» — один класс для 401
         const e = await catchError(run(name)(makeClient(m.fetch)));
         expect(e).toBeInstanceOf(GreenApiSessionError);
         expect(isSessionInvalidError(e)).toBe(true);
-        const err = e as GreenApiSessionError;
+        const err = asSessionError(e);
         expect(err.code).toBe(code);
         expect(err.retry).toBe('none');
         expect(err.sessionInvalid).toBe(true);
@@ -80,7 +78,7 @@ describe('«сессия невалидна» — один класс для 401
   it('403 `Your account is suspended`: на sendMessage — не сессия (свой текст п. 3.6), на прочих — сессия', async () => {
     const reply = { status: 403, body: 'Your account is suspended' };
     const eSend = await catchError(run('sendMessage')(makeClient(mockFetch(reply).fetch)));
-    expect((eSend as GreenApiError).code).toBe(C.ACCOUNT_SUSPENDED);
+    expect(asGreenApiError(eSend).code).toBe(C.ACCOUNT_SUSPENDED);
     expect(isSessionInvalidError(eSend)).toBe(false);
     for (const name of NAMES.filter((n) => n !== 'sendMessage')) {
       const e = await catchError(run(name)(makeClient(mockFetch(reply).fetch)));
@@ -130,7 +128,7 @@ describe('close(): ответы старой сессии отбрасывают
       const p = catchError(run(name)(c));
       await Promise.resolve();
       c.close();
-      const e = (await p) as GreenApiError;
+      const e = asGreenApiError(await p);
       expect(e.code).toBe(C.SESSION_CLOSED);
       expect(e.retry).toBe('none');
       expect(c.isClosed()).toBe(true);
@@ -149,7 +147,7 @@ describe('close(): ответы старой сессии отбрасывают
     await Promise.resolve();
     c.close();
     f.release();
-    const e = (await p) as GreenApiError;
+    const e = asGreenApiError(await p);
     expect(e.code).toBe(C.SESSION_CLOSED);
     expect(e.receiptId).toBeUndefined();
     expect(lines).not.toContain('GREEN-API response');
@@ -161,7 +159,7 @@ describe('close(): ответы старой сессии отбрасывают
     c.close();
     c.close();
     for (const name of NAMES) {
-      const e = (await catchError(run(name)(c))) as GreenApiError;
+      const e = await catchGreenApiError(run(name)(c));
       expect(e.code).toBe(C.SESSION_CLOSED);
     }
     expect(m.calls).toHaveLength(0);
@@ -179,7 +177,7 @@ describe('close(): ответы старой сессии отбрасывают
       });
     const client = makeClient(m.fetch, { sleep });
     holder.client = client;
-    const e = (await catchError(run('sendMessage')(client))) as GreenApiError;
+    const e = await catchGreenApiError(run('sendMessage')(client));
     expect(e.code).toBe(C.SESSION_CLOSED);
     expect(m.calls).toHaveLength(1);
   });
@@ -193,7 +191,7 @@ describe('close(): ответы старой сессии отбрасывают
     };
     const client = makeClient(m.fetch, { sleep });
     holder.client = client;
-    const e = (await catchError(run('deleteNotification')(client))) as GreenApiError;
+    const e = await catchGreenApiError(run('deleteNotification')(client));
     expect(e.code).toBe(C.SESSION_CLOSED);
     expect(m.calls).toHaveLength(1);
   });
@@ -203,7 +201,7 @@ describe('close(): ответы старой сессии отбрасывают
     const pOld = catchError(old.receiveNotification());
     const fresh = makeClient(mockFetch({ body: { stateInstance: 'authorized' } }).fetch);
     old.close();
-    expect(((await pOld) as GreenApiError).code).toBe(C.SESSION_CLOSED);
+    expect(asGreenApiError(await pOld).code).toBe(C.SESSION_CLOSED);
     await expect(fresh.getStateInstance()).resolves.toEqual({ stateInstance: 'authorized' });
     expect(fresh.isClosed()).toBe(false);
   });
@@ -213,7 +211,7 @@ describe('close(): ответы старой сессии отбрасывают
     const ctrl = new AbortController();
     const p = catchError(c.getSettings({ signal: ctrl.signal }));
     ctrl.abort();
-    expect(((await p) as GreenApiError).code).toBe(C.ABORTED);
+    expect(asGreenApiError(await p).code).toBe(C.ABORTED);
   });
 });
 
@@ -244,7 +242,7 @@ describe('внешний signal отменён, пока читалось тел
     const ctrl = new AbortController();
     const f = abortDuringBody(ctrl, body);
     const c = makeClient(f.fetch);
-    const e = (await catchError(run(name)(c, ctrl.signal))) as GreenApiError;
+    const e = await catchGreenApiError(run(name)(c, ctrl.signal));
     expect(e.code).toBe(C.ABORTED);
     expect(e.retry).toBe('none');
     expect(e.receiptId).toBeUndefined();
@@ -259,7 +257,7 @@ describe('внешний signal отменён, пока читалось тел
     await Promise.resolve();
     ctrl.abort();
     f.release();
-    const e = (await p) as GreenApiError;
+    const e = asGreenApiError(await p);
     expect(e.code).toBe(C.ABORTED);
     expect(e.receiptId).toBeUndefined();
     expect(c.isClosed()).toBe(false);
@@ -296,7 +294,7 @@ describe('токен не попадает в ошибки и логи, вклю
     };
     const c = makeClient(mockFetch({ throws: thrown }).fetch, { logger });
     for (const name of NAMES) {
-      const e = (await catchError(run(name)(c))) as GreenApiError;
+      const e = await catchGreenApiError(run(name)(c));
       expect(e.code).toBe(C.NETWORK);
       expect('cause' in e).toBe(false);
       const views = [
@@ -336,7 +334,7 @@ describe('токен не попадает в ошибки и логи, вклю
 describe('форматы (EC-I3, EC-U2)', () => {
   it('receiptId > 2^53 → UNEXPECTED_RESPONSE с backoff, без попытки удалить', async () => {
     const m = mockFetch({ body: '{"receiptId":9007199254740994,"body":{}}' });
-    const e = (await catchError(makeClient(m.fetch).receiveNotification())) as GreenApiError;
+    const e = await catchGreenApiError(makeClient(m.fetch).receiveNotification());
     expect(e.code).toBe(C.UNEXPECTED_RESPONSE);
     expect(e.retry).toBe('backoff');
     expect(e.receiptId).toBeUndefined();
@@ -352,9 +350,7 @@ describe('форматы (EC-I3, EC-U2)', () => {
     expect(ok.length).toBe(4000);
     await c.sendMessage({ chatId: '10000002', message: ok });
     const tooLong = 'a'.repeat(MAX_MESSAGE_LENGTH - 1) + '😀';
-    const e = (await catchError(
-      c.sendMessage({ chatId: '10000002', message: tooLong }),
-    )) as GreenApiError;
+    const e = await catchGreenApiError(c.sendMessage({ chatId: '10000002', message: tooLong }));
     expect(e.code).toBe(C.INVALID_ARGUMENT);
     expect(m.calls).toHaveLength(1);
   });

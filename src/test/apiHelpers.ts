@@ -1,5 +1,6 @@
 import { beforeEach, vi } from 'vitest';
 import { createGreenApiClient } from '../api/client';
+import { GreenApiError, GreenApiQuotaError, GreenApiSessionError } from '../api/errors';
 import type { GreenApiClientConfig, GreenApiLogger } from '../api/clientTypes';
 
 /**
@@ -86,8 +87,11 @@ export function recordingSleep() {
 }
 
 /** Клиент на моках. По умолчанию паузы повторов мгновенные (`recordingSleep`). */
-export function makeClient(fetchImpl: typeof fetch, extra: Partial<GreenApiClientConfig> = {}) {
-  return createGreenApiClient({
+export function makeClient<H = ReturnType<typeof globalThis.setTimeout>>(
+  fetchImpl: typeof fetch,
+  extra: Partial<GreenApiClientConfig<H>> = {},
+) {
+  return createGreenApiClient<H>({
     ...FAKE_CREDS,
     fetch: fetchImpl,
     sleep: recordingSleep().sleep,
@@ -103,6 +107,34 @@ export async function catchError(p: Promise<unknown>): Promise<unknown> {
     return e;
   }
   throw new Error('Expected promise to reject');
+}
+
+function expectInstance<T>(e: unknown, cls: abstract new (...args: never[]) => T, name: string): T {
+  if (e instanceof cls) return e;
+  throw new Error(`Expected ${name}, got ${e instanceof Error ? e.name : typeof e}`);
+}
+
+/** Значение — `GreenApiError` (проверка `instanceof`, без приведения типов). */
+export function asGreenApiError(e: unknown): GreenApiError {
+  return expectInstance(e, GreenApiError, 'GreenApiError');
+}
+
+export function asQuotaError(e: unknown): GreenApiQuotaError {
+  return expectInstance(e, GreenApiQuotaError, 'GreenApiQuotaError');
+}
+
+export function asSessionError(e: unknown): GreenApiSessionError {
+  return expectInstance(e, GreenApiSessionError, 'GreenApiSessionError');
+}
+
+/** Ловит отклонённый промис и проверяет, что это `GreenApiError` (падает иначе). */
+export async function catchGreenApiError(p: Promise<unknown>): Promise<GreenApiError> {
+  return asGreenApiError(await catchError(p));
+}
+
+/** То же для 466: `GreenApiQuotaError`. */
+export async function catchQuotaError(p: Promise<unknown>): Promise<GreenApiQuotaError> {
+  return asQuotaError(await catchError(p));
 }
 
 /** Реальная сеть в тестах запрещена: любой непомоканный глобальный fetch падает. */

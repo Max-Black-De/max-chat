@@ -8,10 +8,13 @@ import {
 } from './errors';
 import { redactSecret, truncate } from './mask';
 import { parseQuota466Body } from './quota';
-import type { GreenApiLogger, GreenApiTimers } from './clientTypes';
+import type { GreenApiLogger } from './clientTypes';
 import type { GreenApiMethod } from './url';
 
 /** Внутренний транспорт клиента: fetch + таймаут + AbortSignal + классификация ошибок. */
+
+/** Запланировать вызов через `ms`; возвращает функцию отмены (обёртка над `GreenApiTimers<H>`). */
+export type Schedule = (fn: () => void, ms: number) => () => void;
 
 export interface TransportContext {
   fetch: typeof fetch;
@@ -19,7 +22,7 @@ export interface TransportContext {
   /** Нужен только для вычищения из текстов ответов. */
   secret: string;
   logger: GreenApiLogger | undefined;
-  timers: GreenApiTimers;
+  schedule: Schedule;
   /** Сигнал сессии клиента: `close()` прерывает запросы, поздние ответы отбрасываются (EC-S7). */
   session: AbortSignal;
 }
@@ -130,7 +133,7 @@ export async function send(
 
   const controller = new AbortController();
   let timedOut = false;
-  const timer = ctx.timers.setTimeout(() => {
+  const cancelTimer = ctx.schedule(() => {
     timedOut = true;
     controller.abort();
   }, req.timeoutMs);
@@ -190,7 +193,7 @@ export async function send(
     });
     return { status: res.status, text, retryAfter: res.headers.get('Retry-After') };
   } finally {
-    ctx.timers.clearTimeout(timer);
+    cancelTimer();
     outer?.removeEventListener('abort', onOuterAbort);
     session.removeEventListener('abort', onOuterAbort);
   }

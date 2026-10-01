@@ -14,6 +14,8 @@ import {
   type MockReply,
   blockRealNetwork,
   callAt,
+  asGreenApiError,
+  catchGreenApiError,
 } from '../../test/apiHelpers';
 
 blockRealNetwork();
@@ -41,7 +43,7 @@ async function errorOf(
 ): Promise<GreenApiError> {
   const e = await catchError(call(makeClient(mockFetch(reply).fetch)));
   expect(e).toBeInstanceOf(GreenApiError);
-  return e as GreenApiError;
+  return asGreenApiError(e);
 }
 
 describe('маппинг HTTP-кодов (§5.4)', () => {
@@ -225,7 +227,7 @@ describe('сеть, таймаут, отмена, JSON', () => {
       } as unknown as Response),
     );
     const e = await catchError(makeClient(broken).getSettings());
-    expect((e as GreenApiError).code).toBe(C.NETWORK);
+    expect(asGreenApiError(e).code).toBe(C.NETWORK);
   });
 
   it('таймаут → TIMEOUT (по timeoutMs вызова)', async () => {
@@ -233,7 +235,7 @@ describe('сеть, таймаут, отмена, JSON', () => {
     const c = makeClient(mockFetch({ hang: true }).fetch);
     const p = catchError(c.getStateInstance({ timeoutMs: 1000 }));
     await vi.advanceTimersByTimeAsync(1000);
-    const e = (await p) as GreenApiError;
+    const e = asGreenApiError(await p);
     expect(e.code).toBe(C.TIMEOUT);
     expect(e.retry).toBe('backoff');
   });
@@ -246,7 +248,7 @@ describe('сеть, таймаут, отмена, JSON', () => {
     await vi.advanceTimersByTimeAsync(29_999);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(((await p) as GreenApiError).code).toBe(C.TIMEOUT);
+    expect(asGreenApiError(await p).code).toBe(C.TIMEOUT);
   });
 
   it('receiveNotification: HTTP-таймаут не меньше receiveTimeout + 10 с', async () => {
@@ -259,7 +261,7 @@ describe('сеть, таймаут, отмена, JSON', () => {
     await vi.advanceTimersByTimeAsync(29_999);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(((await p) as GreenApiError).code).toBe(C.TIMEOUT);
+    expect(asGreenApiError(await p).code).toBe(C.TIMEOUT);
   });
 
   it.each(Object.keys(METHODS))('%s: AbortSignal во время запроса → ABORTED', async (name) => {
@@ -268,7 +270,7 @@ describe('сеть, таймаут, отмена, JSON', () => {
     const p = catchError(method(name)(c, ctrl.signal));
     await Promise.resolve();
     ctrl.abort();
-    const e = (await p) as GreenApiError;
+    const e = asGreenApiError(await p);
     expect(e.code).toBe(C.ABORTED);
     expect(e.retry).toBe('none');
   });
@@ -277,7 +279,7 @@ describe('сеть, таймаут, отмена, JSON', () => {
     const m = mockFetch({ body: {} });
     const ctrl = new AbortController();
     ctrl.abort();
-    const e = (await catchError(method(name)(makeClient(m.fetch), ctrl.signal))) as GreenApiError;
+    const e = await catchGreenApiError(method(name)(makeClient(m.fetch), ctrl.signal));
     expect(e.code).toBe(C.ABORTED);
     expect(m.calls).toHaveLength(0);
   });
@@ -385,7 +387,7 @@ describe('рекомендации повтора (retry)', () => {
     c.close();
     const closed = await catchError(c.receiveNotification());
     expect(closed).toBeInstanceOf(GreenApiError);
-    expect((closed as GreenApiError).retry).toBe('none');
+    expect(asGreenApiError(closed).retry).toBe('none');
   });
 
   it('retryHintFor: таблица для receive и getStateInstance', () => {
@@ -424,9 +426,7 @@ describe('рекомендации повтора (retry)', () => {
       { status: 400, body: 'instance is starting or not authorized' },
     ] as MockReply[]) {
       const m = mockFetch(reply);
-      const e = (await catchError(
-        makeClient(m.fetch).checkAccount('79991234567'),
-      )) as GreenApiError;
+      const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79991234567'));
       expect(e.retry).toBe('none');
       expect(m.calls).toHaveLength(1);
     }

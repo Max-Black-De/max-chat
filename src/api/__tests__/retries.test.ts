@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GreenApiErrorCode as C, type GreenApiError } from '../errors';
+import { GreenApiErrorCode as C } from '../errors';
 import { parseRetryAfter } from '../http';
 import { createGreenApiClient } from '../client';
 import {
@@ -15,6 +15,8 @@ import {
   mockFetch,
   recordingSleep,
   type MockReply,
+  asGreenApiError,
+  catchGreenApiError,
 } from '../../test/apiHelpers';
 
 blockRealNetwork();
@@ -63,7 +65,7 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
   it('4 раза 429 → RATE_LIMITED, retry none, attempts 4, паузы 1 → 2 → 4 с', async () => {
     const m = mockFetch({ status: 429 });
     const s = recordingSleep();
-    const e = (await catchError(send(makeClient(m.fetch, { sleep: s.sleep })))) as GreenApiError;
+    const e = await catchGreenApiError(send(makeClient(m.fetch, { sleep: s.sleep })));
     expect(e.code).toBe(C.RATE_LIMITED);
     expect(e.retry).toBe('none');
     expect(e.attempts).toBe(4);
@@ -109,7 +111,7 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
 
   it('retryAfterMs попадает в ошибку 429', async () => {
     const m = mockFetch({ status: 429, headers: { 'Retry-After': '2' } });
-    const e = (await catchError(send(makeClient(m.fetch)))) as GreenApiError;
+    const e = await catchGreenApiError(send(makeClient(m.fetch)));
     expect(e.retryAfterMs).toBe(2000);
   });
 
@@ -124,7 +126,7 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
   ])('%s → без автоповтора: 1 запрос, ошибка наверх', async (_n, reply, code) => {
     const m = mockFetch(reply, OK_SEND);
     const s = recordingSleep();
-    const e = (await catchError(send(makeClient(m.fetch, { sleep: s.sleep })))) as GreenApiError;
+    const e = await catchGreenApiError(send(makeClient(m.fetch, { sleep: s.sleep })));
     expect(e.code).toBe(code);
     expect(e.retry).toBe('none');
     expect(e.attempts).toBe(1);
@@ -139,14 +141,14 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
       makeClient(m.fetch).sendMessage({ chatId: CHAT, message: 'x' }, { timeoutMs: 500 }),
     );
     await vi.advanceTimersByTimeAsync(500);
-    const e = (await p) as GreenApiError;
+    const e = asGreenApiError(await p);
     expect(e.code).toBe(C.TIMEOUT);
     expect(m.calls).toHaveLength(1);
   });
 
   it('429, затем 502 → ошибка SERVER на 2-й попытке, дальше не повторяет', async () => {
     const m = mockFetch({ status: 429 }, { status: 502 }, OK_SEND);
-    const e = (await catchError(send(makeClient(m.fetch)))) as GreenApiError;
+    const e = await catchGreenApiError(send(makeClient(m.fetch)));
     expect(e.code).toBe(C.SERVER);
     expect(e.attempts).toBe(2);
     expect(m.calls).toHaveLength(2);
@@ -162,9 +164,7 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
         });
         ctrl.abort();
       });
-    const e = (await catchError(
-      send(makeClient(m.fetch, { sleep }), ctrl.signal),
-    )) as GreenApiError;
+    const e = await catchGreenApiError(send(makeClient(m.fetch, { sleep }), ctrl.signal));
     expect(e.code).toBe(C.ABORTED);
     expect(e.retry).toBe('none');
     expect(m.calls).toHaveLength(1);
@@ -190,7 +190,7 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
     );
     await vi.advanceTimersByTimeAsync(500);
     ctrl.abort();
-    const e = (await p2) as GreenApiError;
+    const e = asGreenApiError(await p2);
     expect(e.code).toBe(C.ABORTED);
     expect(m2.calls).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
@@ -218,7 +218,7 @@ describe('deleteNotification: до 3 повторов 1 → 2 → 4 с (§5.4, �
   it('4 раза 502 → SERVER, retry none, attempts 4, паузы 1 → 2 → 4 с', async () => {
     const m = mockFetch({ status: 502 });
     const s = recordingSleep();
-    const e = (await catchError(del(makeClient(m.fetch, { sleep: s.sleep })))) as GreenApiError;
+    const e = await catchGreenApiError(del(makeClient(m.fetch, { sleep: s.sleep })));
     expect(e.code).toBe(C.SERVER);
     expect(e.retry).toBe('none');
     expect(e.attempts).toBe(4);
@@ -246,7 +246,7 @@ describe('deleteNotification: до 3 повторов 1 → 2 → 4 с (§5.4, �
     ],
   ])('%s → без повтора', async (_n, reply, code) => {
     const m = mockFetch(reply, { body: { result: true } });
-    const e = (await catchError(del(makeClient(m.fetch)))) as GreenApiError;
+    const e = await catchGreenApiError(del(makeClient(m.fetch)));
     expect(e.code).toBe(code);
     expect(m.calls).toHaveLength(1);
   });
@@ -268,7 +268,7 @@ describe('deleteNotification: до 3 повторов 1 → 2 → 4 с (§5.4, �
         });
         ctrl.abort();
       });
-    const e = (await catchError(del(makeClient(m.fetch, { sleep }), ctrl.signal))) as GreenApiError;
+    const e = await catchGreenApiError(del(makeClient(m.fetch, { sleep }), ctrl.signal));
     expect(e.code).toBe(C.ABORTED);
     expect(m.calls).toHaveLength(1);
   });

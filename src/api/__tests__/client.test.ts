@@ -9,12 +9,12 @@ import {
   outgoingPhoneText,
 } from '../../test/fixtures/apiNotifications';
 import {
-  catchError,
   makeClient,
   mockFetch,
   blockRealNetwork,
   callAt,
   bodyText,
+  catchGreenApiError,
 } from '../../test/apiHelpers';
 
 blockRealNetwork();
@@ -32,7 +32,7 @@ describe('getStateInstance / getSettings', () => {
 
   it('нет stateInstance → UNEXPECTED_RESPONSE', async () => {
     const c = makeClient(mockFetch({ body: { foo: 1 } }).fetch);
-    const e = (await catchError(c.getStateInstance())) as GreenApiError;
+    const e = await catchGreenApiError(c.getStateInstance());
     expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
   });
 
@@ -120,7 +120,7 @@ describe('checkAccount', () => {
     'ненормализованный номер %j → INVALID_ARGUMENT без запроса',
     async (phone) => {
       const m = mockFetch({ body: {} });
-      const e = (await catchError(makeClient(m.fetch).checkAccount(phone))) as GreenApiError;
+      const e = await catchGreenApiError(makeClient(m.fetch).checkAccount(phone));
       expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
       expect(m.calls).toHaveLength(0);
     },
@@ -141,7 +141,7 @@ describe('checkAccount', () => {
     ['exist строкой', { exist: 'true', chatId: '10000000' }],
   ])('%s → UNEXPECTED_RESPONSE, один запрос, retry none', async (_name, body) => {
     const m = mockFetch({ body }, { body: { exist: true, chatId: '10000000' } });
-    const e = (await catchError(makeClient(m.fetch).checkAccount('79991234567'))) as GreenApiError;
+    const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79991234567'));
     expect(e).toBeInstanceOf(GreenApiError);
     expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
     expect(e.retry).toBe('none');
@@ -150,7 +150,7 @@ describe('checkAccount', () => {
 
   it('битый JSON → INVALID_JSON без повтора', async () => {
     const m = mockFetch({ body: '{"exist":true,' });
-    const e = (await catchError(makeClient(m.fetch).checkAccount('79991234567'))) as GreenApiError;
+    const e = await catchGreenApiError(makeClient(m.fetch).checkAccount('79991234567'));
     expect(e.code).toBe(GreenApiErrorCode.INVALID_JSON);
     expect(e.retry).toBe('none');
     expect(m.calls).toHaveLength(1);
@@ -209,9 +209,7 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
     'chatId %j с @ запрещён, запрос не уходит',
     async (chatId) => {
       const m = mockFetch({ body: { idMessage: '1' } });
-      const e = (await catchError(
-        makeClient(m.fetch).sendMessage({ chatId, message: 'x' }),
-      )) as GreenApiError;
+      const e = await catchGreenApiError(makeClient(m.fetch).sendMessage({ chatId, message: 'x' }));
       expect(e).toBeInstanceOf(GreenApiError);
       expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
       expect(e.reason).toMatch(/@/);
@@ -224,9 +222,7 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
     'chatId %j (группа/канал/мусор) отклоняется',
     async (chatId) => {
       const m = mockFetch({ body: { idMessage: '1' } });
-      const e = (await catchError(
-        makeClient(m.fetch).sendMessage({ chatId, message: 'x' }),
-      )) as GreenApiError;
+      const e = await catchGreenApiError(makeClient(m.fetch).sendMessage({ chatId, message: 'x' }));
       expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
       expect(m.calls).toHaveLength(0);
     },
@@ -235,9 +231,7 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
   it('allowedChatIds: чужой chatId → CHAT_ID_NOT_ALLOWED, свой — уходит', async () => {
     const m = mockFetch({ body: { idMessage: '1790000000123' } });
     const c = makeClient(m.fetch, { allowedChatIds: ['10000002'] });
-    const e = (await catchError(
-      c.sendMessage({ chatId: '10000003', message: 'x' }),
-    )) as GreenApiError;
+    const e = await catchGreenApiError(c.sendMessage({ chatId: '10000003', message: 'x' }));
     expect(e.code).toBe(GreenApiErrorCode.CHAT_ID_NOT_ALLOWED);
     expect(m.calls).toHaveLength(0);
     await c.sendMessage({ chatId: '10000002', message: 'x' });
@@ -248,7 +242,7 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
     const m = mockFetch({ body: { idMessage: '1' } });
     const c = makeClient(m.fetch);
     for (const message of ['', '   \n ', 'a'.repeat(4001)]) {
-      const e = (await catchError(c.sendMessage({ chatId: '10000002', message }))) as GreenApiError;
+      const e = await catchGreenApiError(c.sendMessage({ chatId: '10000002', message }));
       expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
     }
     expect(m.calls).toHaveLength(0);
@@ -261,9 +255,9 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
     expect(messageLength('a'.repeat(4000))).toBe(4000);
     const m = mockFetch({ body: { idMessage: '1' } });
     const c = makeClient(m.fetch);
-    const e = (await catchError(
+    const e = await catchGreenApiError(
       c.sendMessage({ chatId: '10000002', message: '😀'.repeat(4000) }),
-    )) as GreenApiError;
+    );
     expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
     expect(m.calls).toHaveLength(0);
     await c.sendMessage({ chatId: '10000002', message: '😀'.repeat(2000) });
@@ -281,9 +275,7 @@ describe('sendMessage: защита chatId и текста (§5.5, Р-26, §4.3 
 
   it('нет idMessage → UNEXPECTED_RESPONSE; 18-значный idMessage не теряет точность', async () => {
     const c1 = makeClient(mockFetch({ body: { foo: 1 } }).fetch);
-    const e = (await catchError(
-      c1.sendMessage({ chatId: '10000002', message: 'x' }),
-    )) as GreenApiError;
+    const e = await catchGreenApiError(c1.sendMessage({ chatId: '10000002', message: 'x' }));
     expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
     const c2 = makeClient(mockFetch({ body: '{"idMessage":"117900000600000001"}' }).fetch);
     await expect(c2.sendMessage({ chatId: '10000002', message: 'x' })).resolves.toEqual({
@@ -333,7 +325,7 @@ describe('receiveNotification (§5.2)', () => {
     const c = makeClient(
       mockFetch({ body: '{"receiptId": 55, "body": {"typeWebhook": "x", ' }).fetch,
     );
-    const e = (await catchError(c.receiveNotification())) as GreenApiError;
+    const e = await catchGreenApiError(c.receiveNotification());
     expect(e.code).toBe(GreenApiErrorCode.INVALID_JSON);
     expect(e.receiptId).toBe(55);
     expect(e.retry).toBe('backoff');
@@ -351,7 +343,7 @@ describe('receiveNotification (§5.2)', () => {
     ['{"receiptId":10,"body":{"x":{"receiptId":9}', 10],
   ])('битый JSON %j: receiptId только из ведущего ключа → %s (ВА-18)', async (body, expected) => {
     const c = makeClient(mockFetch({ body }).fetch);
-    const e = (await catchError(c.receiveNotification())) as GreenApiError;
+    const e = await catchGreenApiError(c.receiveNotification());
     expect(e.code).toBe(GreenApiErrorCode.INVALID_JSON);
     expect(e.receiptId).toBe(expected);
     expect(e.retry).toBe('backoff');
@@ -359,7 +351,7 @@ describe('receiveNotification (§5.2)', () => {
 
   it('невалидный receiptId → UNEXPECTED_RESPONSE', async () => {
     const c = makeClient(mockFetch({ body: '{"receiptId":"abc","body":{}}' }).fetch);
-    const e = (await catchError(c.receiveNotification())) as GreenApiError;
+    const e = await catchGreenApiError(c.receiveNotification());
     expect(e.code).toBe(GreenApiErrorCode.UNEXPECTED_RESPONSE);
   });
 
@@ -369,7 +361,7 @@ describe('receiveNotification (§5.2)', () => {
     await c.receiveNotification({ receiveTimeout: 5 });
     expect(callAt(m.calls, 0).url).toMatch(/\?receiveTimeout=5$/);
     for (const receiveTimeout of [4, 61, 2.5]) {
-      const e = (await catchError(c.receiveNotification({ receiveTimeout }))) as GreenApiError;
+      const e = await catchGreenApiError(c.receiveNotification({ receiveTimeout }));
       expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
     }
     expect(m.calls).toHaveLength(1);
@@ -410,7 +402,7 @@ describe('deleteNotification (§5.2, §5.4)', () => {
 
   it('прочие 500 → после 3 встроенных повторов ошибка SERVER, retry none (ВА-17)', async () => {
     const m = mockFetch({ status: 500, body: 'Internal error' });
-    const e = (await catchError(makeClient(m.fetch).deleteNotification(1))) as GreenApiError;
+    const e = await catchGreenApiError(makeClient(m.fetch).deleteNotification(1));
     expect(e.code).toBe(GreenApiErrorCode.SERVER);
     expect(e.retry).toBe('none');
     expect(m.calls).toHaveLength(4);
@@ -420,7 +412,7 @@ describe('deleteNotification (§5.2, §5.4)', () => {
     'receiptId %s → INVALID_ARGUMENT без запроса',
     async (rid) => {
       const m = mockFetch({ body: { result: true } });
-      const e = (await catchError(makeClient(m.fetch).deleteNotification(rid))) as GreenApiError;
+      const e = await catchGreenApiError(makeClient(m.fetch).deleteNotification(rid));
       expect(e.code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
       expect(m.calls).toHaveLength(0);
     },

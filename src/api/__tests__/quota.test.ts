@@ -14,6 +14,7 @@ import {
   mockFetch,
   recordingLogger,
   blockRealNetwork,
+  asQuotaError,
 } from '../../test/apiHelpers';
 
 blockRealNetwork();
@@ -143,7 +144,7 @@ describe('466 в клиенте', () => {
       const t = send(body);
       const e = await t.run();
       expect(e).toBeInstanceOf(GreenApiQuotaError);
-      const q = e as GreenApiQuotaError;
+      const q = asQuotaError(e);
       expect(q.code).toBe(GreenApiErrorCode.QUOTA_EXCEEDED);
       expect(q.httpStatus).toBe(466);
       expect(q.retry).toBe('none');
@@ -157,7 +158,7 @@ describe('466 в клиенте', () => {
     'checkAccount + %s → GreenApiQuotaError',
     async (_name, body) => {
       const t = check(body);
-      const e = (await t.run()) as GreenApiQuotaError;
+      const e = asQuotaError(await t.run());
       expect(isQuotaError(e)).toBe(true);
       expect(e.retry).toBe('none');
       expect(t.m.calls).toHaveLength(1);
@@ -165,11 +166,11 @@ describe('466 в клиенте', () => {
   );
 
   it('466 с не-JSON телом: sendMessage → chats, checkAccount → checks', async () => {
-    expect(((await send('Quota exceeded').run()) as GreenApiQuotaError).quota).toEqual({
+    expect(asQuotaError(await send('Quota exceeded').run()).quota).toEqual({
       kind: 'chats',
       source: 'fallback',
     });
-    expect(((await check('').run()) as GreenApiQuotaError).quota).toEqual({
+    expect(asQuotaError(await check('').run()).quota).toEqual({
       kind: 'checks',
       source: 'fallback',
     });
@@ -177,7 +178,7 @@ describe('466 в клиенте', () => {
 
   it('description и чужие chatId не попадают в message, toJSON и логи', async () => {
     const t = send(quota466Bodies.correspondentsStatusStrings);
-    const e = (await t.run()) as GreenApiQuotaError;
+    const e = asQuotaError(await t.run());
     const dumps = [e.message, String(e), JSON.stringify(e), ...t.lines];
     for (const d of dumps) {
       expect(d).not.toMatch(/following chats|-10000000000001/);

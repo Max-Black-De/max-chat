@@ -15,7 +15,7 @@ const api = createGreenApiClient({
   apiUrl?: string,                        // по умолчанию DEFAULT_API_URL (https://api.green-api.com), «/» в конце обрезается
   timeoutMs?: number,                     // по умолчанию REQUEST_TIMEOUT_MS = 30 000 (Р-20), per-call — opts.timeoutMs
   fetch?: typeof fetch,                   // инъекция для тестов
-  timers?: { setTimeout, clearTimeout },  // инъекция для тестов
+  timers?: GreenApiTimers<H>,             // инъекция для тестов; H — тип дескриптора таймера
   logger?: { debug?, warn? },             // по умолчанию ничего не логируется; в лог идут только замаскированные URL
   allowedChatIds?: readonly string[],     // необязательный белый список для sendMessage (Р-26)
 });

@@ -17,20 +17,26 @@ export interface GreenApiLogger {
   warn?: (message: string, details?: Record<string, unknown>) => void;
 }
 
-/** Таймеры (для тестов с фейковым временем). По умолчанию — глобальные. */
-export interface GreenApiTimers {
-  setTimeout: (fn: () => void, ms: number) => unknown;
-  clearTimeout: (id: unknown) => void;
+/**
+ * Таймеры (для тестов с фейковым временем). По умолчанию — глобальные. `H` — тип дескриптора,
+ * который возвращает `setTimeout` и принимает `clearTimeout` (в браузере — `number`).
+ */
+export interface GreenApiTimers<H = ReturnType<typeof globalThis.setTimeout>> {
+  setTimeout: (fn: () => void, ms: number) => H;
+  clearTimeout: (id: H) => void;
 }
 
-export interface GreenApiClientConfig extends Omit<Credentials, 'apiUrl'> {
+export interface GreenApiClientConfig<H = ReturnType<typeof globalThis.setTimeout>> extends Omit<
+  Credentials,
+  'apiUrl'
+> {
   /** По умолчанию `DEFAULT_API_URL` (`https://api.green-api.com`, Р-1). Хвостовой `/` обрезается. */
   apiUrl?: string;
   /** Реализация fetch. По умолчанию `globalThis.fetch`. */
   fetch?: typeof fetch;
   /** Таймаут HTTP-запроса по умолчанию, мс (`REQUEST_TIMEOUT_MS`, 30 с; Р-20). Переопределяется per-call. */
   timeoutMs?: number;
-  timers?: GreenApiTimers;
+  timers?: GreenApiTimers<H>;
   /**
    * Пауза между встроенными повторами (sendMessage 429, deleteNotification). Должна
    * завершаться отказом при отмене `signal`. По умолчанию — на `timers`.

@@ -16,6 +16,7 @@ import {
   mockFetch,
   blockRealNetwork,
   callAt,
+  asGreenApiError,
 } from '../../test/apiHelpers';
 
 blockRealNetwork();
@@ -107,7 +108,7 @@ describe('построение URL (§5.1)', () => {
       e = x;
     }
     expect(e).toBeInstanceOf(GreenApiError);
-    expect((e as GreenApiError).code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
+    expect(asGreenApiError(e).code).toBe(GreenApiErrorCode.INVALID_ARGUMENT);
   });
 
   it('клиент использует нормализованный URL и правильные HTTP-методы', async () => {

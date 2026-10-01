@@ -5,12 +5,14 @@ import {
   responseError,
   send,
   statusFalseError,
+  type Schedule,
   type TransportContext,
 } from './http';
 import { maskToken } from './mask';
 import type {
   DeleteNotificationResult,
   GreenApiClientConfig,
+  GreenApiTimers,
   InstanceSettings,
   RawReceivedNotification,
   ReceiveOptions,
@@ -160,11 +162,30 @@ export function isCheckAccountChatId(chatId: unknown): chatId is string {
   return typeof chatId === 'string' && /^-?\d+$/.test(chatId);
 }
 
+const defaultTimers: GreenApiTimers = {
+  setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+  clearTimeout: (id) => {
+    globalThis.clearTimeout(id);
+  },
+};
+
+/** `GreenApiTimers<H>` → функция «запланировать и вернуть отмену»: тип дескриптора не выходит наружу. */
+function toSchedule<H>(timers: GreenApiTimers<H>): Schedule {
+  return (fn, ms) => {
+    const id = timers.setTimeout(fn, ms);
+    return () => {
+      timers.clearTimeout(id);
+    };
+  };
+}
+
 /**
  * Создаёт клиент. Токен хранится только в замыкании: у объекта клиента нет
  * поля с токеном, `toString`/`toJSON`/`util.inspect` возвращают `***`.
  */
-export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClient {
+export function createGreenApiClient<H = ReturnType<typeof globalThis.setTimeout>>(
+  config: GreenApiClientConfig<H>,
+): GreenApiClient {
   const credsIn = { ...config, apiUrl: config.apiUrl ?? DEFAULT_API_URL };
   const problem = validateCredentials(credsIn);
   if (problem) throw invalidArgument('client', problem);
@@ -178,12 +199,7 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
   const fetchImpl =
     config.fetch ??
     ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init));
-  const timers = config.timers ?? {
-    setTimeout: (fn: () => void, ms: number) => globalThis.setTimeout(fn, ms),
-    clearTimeout: (id: unknown) => {
-      globalThis.clearTimeout(id as ReturnType<typeof globalThis.setTimeout>);
-    },
-  };
+  const schedule = config.timers ? toSchedule(config.timers) : toSchedule(defaultTimers);
   const sleep =
     config.sleep ??
     ((ms: number, signal?: AbortSignal) =>
@@ -193,10 +209,10 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
           return;
         }
         const onAbort = () => {
-          timers.clearTimeout(id);
+          cancel();
           reject(new Error('aborted'));
         };
-        const id = timers.setTimeout(() => {
+        const cancel = schedule(() => {
           signal?.removeEventListener('abort', onAbort);
           resolve();
         }, ms);
@@ -208,7 +224,7 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
     apiUrl,
     secret: config.apiTokenInstance,
     logger: config.logger,
-    timers,
+    schedule,
     session: sessionCtrl.signal,
   };
 
