@@ -249,3 +249,137 @@ body {
   color: inherit;
   cursor: pointer;
 }
+
+/* ---------- Список чатов (§4.0 п. 2), финальный стиль — F6 ---------- */
+
+.sidebar__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-text-muted);
+}
+.chat-list {
+  list-style: none;
+  margin: 0 -12px;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.chat-list__empty {
+  margin: 4px;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+.chat-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.chat-item:hover {
+  background: var(--c-bg-muted);
+}
+.chat-item--selected,
+.chat-item--selected:hover {
+  background: var(--c-info-bg);
+}
+.chat-item__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.chat-item__title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-item__time {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--c-text-muted);
+}
+/* EC-U3: превью обрезает CSS в одну строку. */
+.chat-item__preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 1.25em;
+  font-size: 0.875rem;
+  color: var(--c-text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-item__unread {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--c-accent);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* ---------- Окно чата (каркас F3, лента — F4) ---------- */
+
+.chat-window {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.chat-header {
+  display: grid;
+  gap: 2px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+.chat-header__title {
+  margin: 0;
+  font-size: 1rem;
+}
+.chat-header__subtitle {
+  font-size: 0.8125rem;
+  color: var(--c-text-muted);
+}
+.chat-body {
+  flex: 1;
+  background: var(--c-bg-muted);
+}
+
+/* ---------- Диалог «Новый чат» (§4.0 п. 3) ---------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(20 24 31 / 40%);
+}
+.dialog {
+  width: 360px;
+  padding: 24px;
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  box-shadow: 0 12px 40px rgb(20 24 31 / 20%);
+}
+.dialog__title {
+  margin: 0 0 16px;
+  font-size: 1.125rem;
+}
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
