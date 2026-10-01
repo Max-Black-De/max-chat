@@ -24,7 +24,7 @@ export const SETTINGS_TIMEOUT_MS = 10_000;
 /** sendMessage при 429: до 3 автоповторов с паузами 1 → 2 → 4 с (п. 3.4, ВА-8). */
 export const SEND_RATE_LIMIT_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
 
-/** `Retry-After` учитывается, только если не больше 30 с (п. 3.4, ВА-8). */
+/** Потолок паузы по `Retry-After`: пауза = min(Retry-After, 30 с) (п. 3.4, ВА-8, EC-T7). */
 export const RETRY_AFTER_MAX_MS = 30_000;
 
 /** deleteNotification при сети / таймауте / 429 / 499 / 5xx: до 3 повторов 1 → 2 → 4 с (§5.4, ВА-17). */

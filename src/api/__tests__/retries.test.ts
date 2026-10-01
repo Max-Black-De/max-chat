@@ -71,7 +71,7 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
     expect(s.delays).toEqual([1000, 2000, 4000]);
   });
 
-  it('Retry-After ≤ 30 с используется как пауза; > 30 с или мусор — 1 → 2 → 4 с', async () => {
+  it('пауза = min(Retry-After, 30 с); нет заголовка или мусор — 1 → 2 → 4 с (п. 3.4, EC-T7)', async () => {
     const m = mockFetch(
       { status: 429, headers: { 'Retry-After': '7' } },
       { status: 429, headers: { 'Retry-After': '31' } },
@@ -80,14 +80,31 @@ describe('sendMessage: 429 → автоповтор до 3 раз (п. 3.4, ВА
     );
     const s = recordingSleep();
     await send(makeClient(m.fetch, { sleep: s.sleep }));
-    expect(s.delays).toEqual([7000, 2000, 4000]);
+    expect(s.delays).toEqual([7000, 30_000, 4000]);
   });
 
-  it('Retry-After ровно 30 с — допустим', async () => {
-    const m = mockFetch({ status: 429, headers: { 'Retry-After': '30' } }, OK_SEND);
+  it('Retry-After ровно 30 с и 0 с — как есть', async () => {
+    const m = mockFetch(
+      { status: 429, headers: { 'Retry-After': '30' } },
+      { status: 429, headers: { 'Retry-After': '0' } },
+      OK_SEND,
+    );
     const s = recordingSleep();
     await send(makeClient(m.fetch, { sleep: s.sleep }));
-    expect(s.delays).toEqual([30_000]);
+    expect(s.delays).toEqual([30_000, 0]);
+  });
+
+  it('Retry-After 120 с и HTTP-дата через час → пауза 30 с, а не 1 → 2 → 4 с', async () => {
+    const later = new Date(Date.now() + 3_600_000).toUTCString();
+    const m = mockFetch(
+      { status: 429, headers: { 'Retry-After': '120' } },
+      { status: 429, headers: { 'Retry-After': later } },
+      { status: 429 },
+      OK_SEND,
+    );
+    const s = recordingSleep();
+    await send(makeClient(m.fetch, { sleep: s.sleep }));
+    expect(s.delays).toEqual([30_000, 30_000, 4000]);
   });
 
   it('retryAfterMs попадает в ошибку 429', async () => {

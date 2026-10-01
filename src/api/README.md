@@ -48,7 +48,7 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 - `deleteNotification`: `result:false` и 500 `findUnAckedMessage` → `alreadyDeleted: true` без исключения (§5.4).
 - **Встроенные повторы** (пауза — инъектируемый `sleep(ms, signal)`, по умолчанию на `timers`; отмена во время
   паузы → `ABORTED`, `close()` → `SESSION_CLOSED`):
-  - `sendMessage` 429 — до 3 автоповторов: `Retry-After` (сек или HTTP-дата), если ≤ 30 с, иначе 1 → 2 → 4 с
+  - `sendMessage` 429 — до 3 автоповторов: пауза min(`Retry-After`, 30 с) (сек или HTTP-дата); нет заголовка или он не читается — 1 → 2 → 4 с
     (ВА-8). Заголовок на `3100.api…` браузеру, скорее всего, не виден (Expose-Headers) — тогда работает запасная
     схема. Сеть, таймаут, 499, 5xx, 466, 4xx — сразу ошибка, без автоповтора (дубли).
   - `deleteNotification` — до 3 повторов 1 → 2 → 4 с при сети, таймауте, 429, 499, 5xx (ВА-17).

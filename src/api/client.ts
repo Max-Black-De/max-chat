@@ -58,7 +58,7 @@ export interface GreenApiClient {
   ): Promise<Required<CheckAccountResponse>>;
   /**
    * POST sendMessage `{chatId, message}`; `@c.us` запрещён. 429 — до 3 автоповторов
-   * (Retry-After ≤ 30 с или 1 → 2 → 4 с); прочие ошибки — без автоповтора (ВА-8).
+   * (min(Retry-After, 30 с) или 1 → 2 → 4 с); прочие ошибки — без автоповтора (ВА-8).
    */
   sendMessage(params: SendMessageParams, options?: RequestOptions): Promise<SendMessageResponse>;
   /** GET receiveNotification?receiveTimeout=N → уведомление или `null` («пустой ответ», §5.2). */
@@ -397,7 +397,7 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
           'sendMessage',
           `message is longer than ${MAX_MESSAGE_LENGTH} characters`,
         );
-      // 429 — запрос отклонён, дубля нет: до 3 автоповторов (Retry-After ≤ 30 с или 1 → 2 → 4 с), ВА-8.
+      // 429 — запрос отклонён, дубля нет: до 3 автоповторов (min(Retry-After, 30 с) или 1 → 2 → 4 с), ВА-8.
       // Прочие ошибки (сеть, таймаут, 499, 5xx, 466…) — сразу наверх, без автоповтора.
       const { value, req, status } = await withRetries(
         () =>
@@ -405,9 +405,10 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
         (e) => e.code === GreenApiErrorCode.RATE_LIMITED,
         SEND_RATE_LIMIT_RETRY_DELAYS_MS,
         options?.signal,
+        // Retry-After прочитан → min(RA, 30 с); нет заголовка или не разобран → 1 → 2 → 4 с (EC-T7).
         (e, i) =>
-          e.retryAfterMs !== undefined && e.retryAfterMs <= RETRY_AFTER_MAX_MS
-            ? e.retryAfterMs
+          e.retryAfterMs !== undefined
+            ? Math.min(e.retryAfterMs, RETRY_AFTER_MAX_MS)
             : (SEND_RATE_LIMIT_RETRY_DELAYS_MS[i] ?? 0),
       );
       const id = value.idMessage;
