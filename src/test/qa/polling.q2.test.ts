@@ -3,8 +3,11 @@
  * `src/polling/loop.test.ts` (там уже есть deleteTooManyRequests, foreignInstance, timerRule и
  * поздний ответ после abort):
  * - EC-P17 после таймаута запроса 30 с: backoff не создаётся `setTimeout` в той же задаче,
- *   что и колбэк таймаута (иначе растёт цепочка таймеров Chrome), `setInterval` нет;
- * - §6.1 п. 2.2 (v1.3.7): пустой ответ быстрее 1 с → пауза 1 с перед следующим receive.
+ *   что и колбэк таймаута (иначе растёт цепочка таймеров Chrome), `setInterval` нет; время в
+ *   тесте стоит, поэтому пустой receive после паузы — «быстрый» и по §6.1 п. 2.2 получает вторую
+ *   паузу 1 с: ровно две паузы — ожидаемо;
+ * - §6.1 п. 2.2 (v1.3.7): пустой ответ быстрее 1 с → пауза 1 с перед следующим receive
+ *   (регресс BUG-Q2-02, исправлено в 319cb40).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGreenApiClient } from '../../api';
@@ -112,12 +115,20 @@ describe('EC-P17: backoff после таймаута запроса', () => {
     await flushMicrotasks();
     expect(setTimeoutSpy).not.toHaveBeenCalled();
     expect(h.scheduled.length).toBe(scheduledBefore);
+    expect(timeoutSpy.mock.calls.map((c) => c[0])).toEqual([
+      s.expected.receiveBackoffSec[0] * 1000,
+    ]);
+
+    // Пауза закончилась → пустой receive. Время стоит, ответ «быстрый» → вторая пауза 1 с
+    // (§6.1 п. 2.2, v1.3.7), тоже через AbortSignal.timeout. Ждём её без таймеров:
+    // vi.waitFor ставит setTimeout/setInterval и сломал бы проверки ниже.
+    sleepTimers[0]?.abort(new DOMException('timeout', 'TimeoutError'));
+    for (let i = 0; i < 20 && timeoutSpy.mock.calls.length < 2; i++) await flushMicrotasks();
     expect(timeoutSpy.mock.calls.map((c) => c[0])).toEqual(
       s.expected.receiveBackoffSec.map((x) => x * 1000),
     );
-
-    // Пауза закончилась → следующий receive (пустой), затем очередь пуста.
-    sleepTimers[0]?.abort(new DOMException('timeout', 'TimeoutError'));
+    expect(h.scheduled.length).toBe(scheduledBefore + 1); // только таймаут 30 с второго receive
+    sleepTimers[1]?.abort(new DOMException('timeout', 'TimeoutError'));
     await h.drained;
     h.controller.abort();
     expect(await run).toBe('aborted');
@@ -127,7 +138,8 @@ describe('EC-P17: backoff после таймаута запроса', () => {
 });
 
 describe('§6.1 п. 2.2 (v1.3.7): защита от холостого цикла', () => {
-  it.fails('BUG-Q2-02: пустой ответ быстрее 1 с → пауза 1 с перед следующим receive', async () => {
+  // Регресс BUG-Q2-02, исправлено в 319cb40.
+  it('BUG-Q2-02: пустой ответ быстрее 1 с → пауза 1 с перед следующим receive', async () => {
     const s = fastEmptyReceiveScenario;
     const h = scriptedLoop(s.receive);
     const run = runPollLoop({

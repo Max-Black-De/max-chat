@@ -2,7 +2,7 @@
  * Q2 (Д3), только моки: маршрутизация уведомлений по ТЗ v1.3.6–v1.3.7.
  * - Р-11 (v1.3.6): входящее `imageMessage` по структуре образца Р-26 → заглушка, без содержимого;
  * - Р-5 (v1.3.7): нет `instanceData` / `idInstance` — не «чужое», уведомление обрабатывается.
- * Красные из-за кода тесты помечены `it.fails` с ID бага (отчёт Q2): код не правим.
+ * Р-5: регресс BUG-Q2-01 (отчёт Q2), исправлено в 53414d2.
  */
 import { describe, expect, it } from 'vitest';
 import { routeNotification } from '../../notifications';
@@ -43,24 +43,24 @@ describe('Р-11: нетекстовое входящее по образцу Р-
 });
 
 describe('Р-5 (v1.3.7): без instanceData — не «чужое»', () => {
-  it.fails(
-    'BUG-Q2-01: входящее без instanceData в известный чат → сообщение, а не foreignInstance',
-    () => {
-      expect(routeNotification(incomingWithoutInstanceData, ctx)).toMatchObject({
-        kind: 'message',
-        message: { chatId: CHAT_IDS.primary, text: 'Тестовый ответ без instanceData' },
-      });
-    },
-  );
+  // Регресс BUG-Q2-01, исправлено в 53414d2.
+  it('BUG-Q2-01: входящее без instanceData в известный чат → сообщение, а не foreignInstance', () => {
+    expect(routeNotification(incomingWithoutInstanceData, ctx)).toMatchObject({
+      kind: 'message',
+      message: { chatId: CHAT_IDS.primary, text: 'Тестовый ответ без instanceData' },
+    });
+  });
 
-  it.fails('BUG-Q2-01: instanceData без idInstance → сообщение, а не foreignInstance', () => {
+  // Регресс BUG-Q2-01, исправлено в 53414d2.
+  it('BUG-Q2-01: instanceData без idInstance → сообщение, а не foreignInstance', () => {
     expect(routeNotification(incomingWithoutIdInstance, ctx)).toMatchObject({
       kind: 'message',
       message: { text: 'Тестовый ответ без idInstance' },
     });
   });
 
-  it.fails('BUG-Q2-01: quotaExceeded без instanceData → событие квоты (баннер §5.5)', () => {
+  // Регресс BUG-Q2-01, исправлено в 53414d2.
+  it('BUG-Q2-01: quotaExceeded без instanceData → событие квоты (баннер §5.5)', () => {
     const body = Object.fromEntries(
       Object.entries(quotaExceededNotification).filter(([key]) => key !== 'instanceData'),
     );

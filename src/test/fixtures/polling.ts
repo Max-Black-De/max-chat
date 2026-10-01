@@ -115,7 +115,8 @@ export const timerRuleAfterTimeoutScenario = {
   receive: [networkTimeout, emptyReceiveResponses.emptyBody],
   expected: {
     deleteReceiptIds: [],
-    receiveBackoffSec: [1],
+    /** Backoff после таймаута + пауза после «быстрого» пустого ответа (§6.1 п. 2.2, v1.3.7). */
+    receiveBackoffSec: [1, 1],
     shownIdMessages: [],
     continuesPolling: true,
   },
