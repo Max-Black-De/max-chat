@@ -56,4 +56,10 @@ test(notifications): cover quotedMessage text extraction
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-То же самое запускает CI (`.github/workflows/ci.yml`).
+То же самое запускает CI (`.github/workflows/ci.yml`). Ещё CI ищет секреты во всей истории git
+([gitleaks](https://github.com/gitleaks/gitleaks), правила — `.gitleaks.toml`, включая токен GREEN-API).
+Локально, если gitleaks установлен:
+
+```
+gitleaks git --config .gitleaks.toml --redact --log-opts="--all" .
+```

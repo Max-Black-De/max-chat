@@ -1,0 +1,35 @@
+# gitleaks (https://github.com/gitleaks/gitleaks): поиск секретов во всей истории git.
+# CI: job `secrets` в .github/workflows/ci.yml. Локально:
+#   gitleaks git --config .gitleaks.toml --redact --log-opts="--all" .
+#
+# Конфиг публичный: реальные idInstance, chatId, номера и токены сюда НЕ пишутся (НФТ-11).
+# Условные значения из CONTRIBUTING.md (1101000000, 10000000, 79990000000, your-api-token)
+# под правило токена не подпадают.
+
+title = "max-chat"
+
+# Встроенные правила gitleaks (AWS, GitHub, приватные ключи, generic-api-key и т. д.).
+[extend]
+useDefault = true
+
+# GREEN-API apiTokenInstance: 50 hex-символов (формат примеров в документации GREEN-API,
+# https://green-api.com/v3/docs/request-format/). Ключевых слов нет намеренно: токен может
+# встретиться где угодно — в URL (`…/getStateInstance/<token>`), в JSON, в .env.
+# Границы — не hex-символ, поэтому 64-символьные sha256 и 40-символьные sha1 не совпадают.
+# Энтропия отсекает заглушки вида `000…0` / `aaa…a`.
+[[rules]]
+id = "green-api-token"
+description = "GREEN-API apiTokenInstance (50 hex)"
+regex = '''(?i)(?:^|[^0-9a-f])([0-9a-f]{50})(?:[^0-9a-f]|$)'''
+secretGroup = 1
+entropy = 3.0
+tags = ["green-api", "token"]
+
+# Точечное исключение: generic-api-key срабатывает на хосты GREEN-API в тестовых фикстурах
+# (`'1101.api.green-api.com'` рядом со словом `api`). Хост — не секрет. Исключаются только
+# секреты, которые целиком являются хостом green-api.com / greenapi.com.
+[[allowlists]]
+description = "GREEN-API hostnames are not secrets"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^([0-9a-z-]+\.)*(green-api|greenapi)\.com$''']
