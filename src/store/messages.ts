@@ -178,12 +178,20 @@ export function applySendFailure(
   return replaceAt(data, i, { ...message, status: 'error', errorText });
 }
 
-/** «Повторить» (п. 3.4, EC-D6): то же сообщение (`localId`) снова «отправляется». */
-export function startRetry(data: ChatMessages, localId: string): ChatMessages {
+/**
+ * «Повторить» (п. 3.4, EC-D6): то же сообщение (`localId`) снова «отправляется». Время —
+ * момент повтора (`Date.now()/1000`), поэтому сообщение переезжает в конец ленты (§6.3 шаг 4,
+ * v1.3.6). Автоповторы 429 внутри клиента время не меняют — они сюда не попадают.
+ */
+export function startRetry(
+  data: ChatMessages,
+  localId: string,
+  timestamp: UnixSeconds,
+): ChatMessages {
   const i = findByLocalId(data, localId);
   const message = data.messages[i];
   if (message?.status !== 'error') return data;
-  return replaceAt(data, i, { ...withoutErrorText(message), status: 'sending' });
+  return replaceAt(data, i, { ...withoutErrorText(message), status: 'sending', timestamp });
 }
 
 /** Выход (§6.3 п. 5, EC-D5): «отправляется» → «не отправлено», «Статус неизвестен…». */
@@ -215,7 +223,7 @@ export type MessagesAction =
   | { type: 'optimisticAdded'; message: OptimisticInput }
   | { type: 'sendSucceeded'; chatId: ChatId; localId: string; idMessage: string }
   | { type: 'sendFailed'; chatId: ChatId; localId: string; errorText: string }
-  | { type: 'retryStarted'; chatId: ChatId; localId: string }
+  | { type: 'retryStarted'; chatId: ChatId; localId: string; timestamp: UnixSeconds }
   | { type: 'notificationMerged'; message: NotificationMessage; localId: string }
   /** Конец сессии: все «отправляется» → «не отправлено» (EC-D5). */
   | { type: 'sendingFailed' };
@@ -261,7 +269,9 @@ export function messagesReducer(state: MessagesState, action: MessagesAction): M
         applySendFailure(d, action.localId, action.errorText),
       );
     case 'retryStarted':
-      return updateChat(state, action.chatId, (d) => startRetry(d, action.localId));
+      return updateChat(state, action.chatId, (d) =>
+        startRetry(d, action.localId, action.timestamp),
+      );
     case 'notificationMerged':
       return updateChat(
         state,

@@ -101,20 +101,32 @@ describe('ошибка и «Повторить» (§6.3 п. 4, EC-D6)', () => {
       status: 'error',
       errorText: SEND_TEXTS.rateLimited,
     });
-    const retried = startRetry(failed, 'l1');
+    const retried = startRetry(failed, 'l1', T + 30.25);
     expect(retried.messages).toHaveLength(1);
     expect(retried.messages[0]).toMatchObject({ localId: 'l1', status: 'sending' });
     expect(retried.messages[0]).not.toHaveProperty('errorText');
-    // Повтор того же сообщения — не новый пузырь, время прежнее.
-    expect(retried.messages[0]?.timestamp).toBe(T + 0.5);
+    // Повтор того же сообщения — не новый пузырь; время — момент повтора (§6.3 шаг 4, v1.3.6).
+    expect(retried.messages[0]?.timestamp).toBe(T + 30.25);
     const sent = applySendSuccess(retried, 'l1', ID_MESSAGES.api2);
     expect(sent.data.messages[0]).toMatchObject({ status: 'sent', idMessage: ID_MESSAGES.api2 });
   });
 
   it('повтор доступен только у «не отправлено»', () => {
     const sending = optimistic();
-    expect(startRetry(sending, 'l1')).toBe(sending);
-    expect(startRetry(sending, 'нет-такого')).toBe(sending);
+    expect(startRetry(sending, 'l1', T + 9)).toBe(sending);
+    expect(startRetry(sending, 'нет-такого', T + 9)).toBe(sending);
+  });
+
+  it('§6.3 шаг 4: после ручного повтора сообщение переезжает в конец ленты', () => {
+    let data = failSendingInChat(optimistic());
+    data = mergeNotificationMessage(
+      data,
+      note({ source: 'incoming', idMessage: ID_MESSAGES.incoming1, timestamp: T + 10 }),
+      'in1',
+    ).data;
+    expect(sortMessages(data.messages).map((m) => m.localId)).toEqual(['l1', 'in1']);
+    data = startRetry(data, 'l1', T + 20);
+    expect(sortMessages(data.messages).map((m) => m.localId)).toEqual(['in1', 'l1']);
   });
 });
 
@@ -285,7 +297,7 @@ describe('messagesReducer', () => {
       message: { localId: 'l1', chatId: CHAT, text: 'a', timestamp: T + 1 },
     });
     s = messagesReducer(s, { type: 'sendFailed', chatId: CHAT, localId: 'l1', errorText: 'e' });
-    s = messagesReducer(s, { type: 'retryStarted', chatId: CHAT, localId: 'l1' });
+    s = messagesReducer(s, { type: 'retryStarted', chatId: CHAT, localId: 'l1', timestamp: T + 2 });
     s = messagesReducer(s, {
       type: 'sendSucceeded',
       chatId: CHAT,
@@ -329,7 +341,9 @@ describe('messagesReducer', () => {
   });
 
   it('действие без изменений возвращает то же состояние', () => {
-    expect(messagesReducer(s0, { type: 'retryStarted', chatId: CHAT, localId: 'x' })).toBe(s0);
+    expect(
+      messagesReducer(s0, { type: 'retryStarted', chatId: CHAT, localId: 'x', timestamp: T }),
+    ).toBe(s0);
   });
 
   it('chatsLoaded заменяет ленты указанных чатов', () => {

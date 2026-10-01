@@ -27,6 +27,9 @@ function loadAll(storage: AppStorage | null, chatIds: Iterable<string>): Message
   return { byChat };
 }
 
+/** Часы по умолчанию: вызов в момент действия (подмена `Date.now` в тестах тоже работает). */
+const systemNow = () => Date.now();
+
 /** Превью в списке чатов: у заглушки — её текст (Р-11). */
 function previewOf(m: StoredMessage): string {
   return m.unsupported ? BANNER_TEXTS.unsupportedMessage : m.text;
@@ -44,7 +47,7 @@ function previewOf(m: StoredMessage): string {
  */
 export function MessagesProvider({
   children,
-  now = Date.now,
+  now = systemNow,
   newId = createLocalId,
 }: {
   children: ReactNode;
@@ -180,10 +183,17 @@ export function MessagesProvider({
       if (!selectCanWrite(latest.current.session)) return;
       const message = findMessage(selectChatMessages(current.current, chatId), localId);
       if (message?.status !== 'error') return;
-      apply({ type: 'retryStarted', chatId, localId });
+      // §6.3 шаг 4 (v1.3.6): время повтора — сообщение в конце ленты и наверху списка чатов.
+      const timestamp = now() / 1000;
+      apply({ type: 'retryStarted', chatId, localId, timestamp });
+      latest.current.chats.reportActivity(
+        chatId,
+        { text: message.text, timestamp, direction: 'out' },
+        false,
+      );
       void attempt(chatId, localId, message.text);
     },
-    [apply, attempt],
+    [now, apply, attempt],
   );
 
   const applyNotification = useCallback<MessagesContextValue['applyNotification']>(

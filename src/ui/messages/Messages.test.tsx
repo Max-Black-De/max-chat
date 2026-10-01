@@ -274,6 +274,12 @@ describe('лента (§4.0 п. 2, Р-11, Р-16, EC-U4, EC-U5, EC-O1)', () => {
 });
 
 describe('поле ввода (п. 3.1, п. 3.5, EC-U1, EC-U2, EC-U6)', () => {
+  it('Р-28: видимый плейсхолдер «Сообщение», aria-label «Текст сообщения»', async () => {
+    await openMain();
+    expect(input()).toHaveAttribute('placeholder', 'Сообщение');
+    expect(screen.getByRole('textbox', { name: 'Текст сообщения' })).toBe(input());
+  });
+
   it('Enter отправляет, Shift+Enter — нет; поле очищается', async () => {
     const { api } = await openMain();
     type('строка');
@@ -405,11 +411,17 @@ describe('отправка (п. 3.1–3.6, §6.3)', () => {
     });
     type('a');
     pressEnter();
+    const sentAt = within(onlyBubble()).getByTestId('message-time').getAttribute('dateTime');
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       await waitFor(() => {
         expect(pauses).toHaveLength(attempt);
       });
       expect(onlyBubble()).toHaveAttribute('data-status', 'sending');
+      // Автоповторы 429 время не меняют (§6.3 шаг 4, v1.3.6).
+      expect(within(onlyBubble()).getByTestId('message-time')).toHaveAttribute(
+        'dateTime',
+        sentAt ?? '',
+      );
       await act(async () => {
         pauses[attempt - 1]?.();
         await Promise.resolve();
@@ -452,6 +464,48 @@ describe('отправка (п. 3.1–3.6, §6.3)', () => {
       expect(onlyBubble()).toHaveAttribute('data-status', 'sent');
     });
     expect(api.callsOf('sendMessage')).toHaveLength(3);
+  });
+
+  it('§6.3 шаг 4: ручное «Повторить» — время повтора, сообщение в конце ленты и чат наверху', async () => {
+    const local = memoryStorage({
+      ...twoChats(),
+      ...storedMessages([
+        msg({
+          localId: 'e',
+          direction: 'out',
+          text: 'старое',
+          timestamp: T,
+          status: 'error',
+          errorText: SEND_TEXTS.statusUnknown,
+        }),
+        msg({ localId: 'i', idMessage: ID_MESSAGES.incoming1, text: 'потом', timestamp: T + 60 }),
+      ]),
+    });
+    const { local: stored } = await openMain({ local, open: false });
+    openChat(TEST_CHAT_ID_2);
+    openChat(TEST_CHAT_ID);
+    expect(bubbles().map((el) => el.dataset.localId)).toEqual(['e', 'i']);
+    const retryAt = T + 600;
+    vi.spyOn(Date, 'now').mockReturnValue(retryAt * 1000);
+    fireEvent.click(screen.getByTestId('message-retry'));
+    expect(bubbles().map((el) => el.dataset.localId)).toEqual(['i', 'e']);
+    const retried = bubbles()[1];
+    expect(within(retried ?? document.body).getByTestId('message-time')).toHaveAttribute(
+      'dateTime',
+      new Date(retryAt * 1000).toISOString(),
+    );
+    await waitFor(() => {
+      expect(retried).toHaveAttribute('data-status', 'sent');
+    });
+    expect(readStored(stored).messages.find((m) => m.localId === 'e')).toMatchObject({
+      timestamp: retryAt,
+      status: 'sent',
+    });
+    const [first] = screen.getAllByTestId('chat-item');
+    expect(first).toHaveAttribute('data-chat-id', TEST_CHAT_ID);
+    expect(within(first ?? document.body).getByTestId('chat-item-preview')).toHaveTextContent(
+      'старое',
+    );
   });
 
   it('EC-Q1: 466 — текст квоты под пузырём и баннер, без автоповтора', async () => {
@@ -661,6 +715,30 @@ describe('слияние для F5 (§6.3)', () => {
     expect(local.map.has(lsKey(messagesSection('10000099')))).toBe(false);
     openChat(TEST_CHAT_ID_2);
     expect(bubbles().map((el) => el.dataset.direction)).toEqual(['in', 'in']);
+  });
+
+  it('Р-11: подпись нетекстового сообщения не показывается и не сохраняется', async () => {
+    const { local } = await openMain();
+    const caption = 'подпись к картинке';
+    act(() => {
+      messages().applyNotification({
+        chatId: TEST_CHAT_ID,
+        idMessage: ID_MESSAGES.incoming1,
+        source: 'incoming',
+        text: caption,
+        unsupported: true,
+        timestamp: T + 5,
+      });
+    });
+    expect(within(onlyBubble()).getByTestId('message-text')).toHaveTextContent(
+      /^Сообщение этого типа не поддерживается$/,
+    );
+    const [item] = screen.getAllByTestId('chat-item');
+    expect(within(item ?? document.body).getByTestId('chat-item-preview')).toHaveTextContent(
+      /^Сообщение этого типа не поддерживается$/,
+    );
+    expect(document.body.textContent).not.toContain(caption);
+    expect(JSON.stringify([...local.map.values()])).not.toContain(caption);
   });
 
   it('с телефона (outgoingPhone) — свой пузырь справа, счётчик не растёт (EC-N13)', async () => {
