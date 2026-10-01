@@ -15,14 +15,19 @@ import {
   stateResponses,
 } from '../src/test/fixtures';
 import { type Page } from '@playwright/test';
-import { expect, test } from './support/greenApi';
+import { SEND_TEXTS } from '../src/api';
+import { delayed, expect, test } from './support/greenApi';
 
-async function loginAndOpenChat(page: Page) {
-  await page.goto('/');
+async function login(page: Page) {
   await page.getByTestId('login-idInstance').fill(ID_INSTANCE);
   await page.getByTestId('login-apiTokenInstance').fill(API_TOKEN);
   await page.getByTestId('login-submit').click();
   await expect(page.getByTestId('main-screen')).toBeVisible();
+}
+
+async function loginAndOpenChat(page: Page) {
+  await page.goto('/');
+  await login(page);
   await page.getByTestId('new-chat-button').click();
   await page.getByTestId('new-chat-phone').fill(String(PHONES.primary));
   await page.getByTestId('new-chat-submit').click();
@@ -94,4 +99,40 @@ test('EC-U5: RTL и U+202E в своём пузыре — пузырь спра�
     .getByTestId('message-list')
     .evaluate((el) => el.scrollWidth - el.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('EC-U1 (M-13): пробелы — «Отправить» неактивна, Enter не отправляет', async ({
+  page,
+  greenApi,
+}) => {
+  await loginAndOpenChat(page);
+  const input = page.getByTestId('composer-input');
+  await input.fill(messageTexts.onlySpaces);
+  await expect(page.getByTestId('send-button')).toBeDisabled();
+  await input.press('Enter');
+  await expect(page.getByTestId('message')).toHaveCount(0);
+  expect(greenApi.callsTo('sendMessage')).toHaveLength(0);
+});
+
+test('EC-D5 (M-24): выход во время отправки — после входа «не отправлено», «Повторить»', async ({
+  page,
+  greenApi,
+}) => {
+  greenApi.on('sendMessage', delayed(sendMessageResponses.sent, 3_000));
+  await loginAndOpenChat(page);
+  const input = page.getByTestId('composer-input');
+  await input.fill(messageTexts.plain);
+  await input.press('Enter');
+  await expect(page.getByTestId('message')).toHaveAttribute('data-status', 'sending');
+  await page.getByTestId('logout-button').click();
+  await expect(page.getByTestId('login-form')).toBeVisible();
+
+  await login(page);
+  await page.getByTestId('chat-item').click();
+  const bubble = page.getByTestId('message');
+  await expect(bubble).toHaveAttribute('data-status', 'error');
+  await expect(bubble.getByTestId('message-error')).toHaveText(SEND_TEXTS.statusUnknown);
+  await expect(bubble.getByTestId('message-retry')).toBeEnabled();
+  // Автоповтора нет: один вызов sendMessage.
+  expect(greenApi.callsTo('sendMessage')).toHaveLength(1);
 });

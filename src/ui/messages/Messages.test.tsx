@@ -436,6 +436,24 @@ describe('отправка (п. 3.1–3.6, §6.3)', () => {
     expect(api.callsOf('sendMessage')).toHaveLength(5);
   });
 
+  it('EC-Q8 (M-19): 429 → 429 → 200 — один пузырь «отправлено», 3 вызова', async () => {
+    const { api } = await openMain({
+      routes: {
+        sendMessage: [
+          tooManyRequestsResponses.noRetryAfter,
+          tooManyRequestsResponses.retryAfter0s,
+          sendMessageResponses.sent,
+        ],
+      },
+    });
+    type('a');
+    pressEnter();
+    await waitFor(() => {
+      expect(onlyBubble()).toHaveAttribute('data-status', 'sent');
+    });
+    expect(api.callsOf('sendMessage')).toHaveLength(3);
+  });
+
   it('EC-Q1: 466 — текст квоты под пузырём и баннер, без автоповтора', async () => {
     const { api } = await openMain({
       routes: { sendMessage: [quota466Cases.correspondentsStatus.response] },
