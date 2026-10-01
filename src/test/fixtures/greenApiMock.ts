@@ -4,10 +4,11 @@
  */
 import { vi } from 'vitest';
 import type { ApiMethodName } from '../../api/types';
+import { API_TOKEN, ID_INSTANCE } from './constants';
 
-export const TEST_ID_INSTANCE = '1101000000';
-/** Заглушка, заведомо не похожая на настоящий токен (репозиторий публичный). */
-export const TEST_TOKEN = 'TEST-TOKEN-placeholder-not-a-secret';
+/** Условные значения — из общих фикстур QA (`./constants`). */
+export const TEST_ID_INSTANCE = ID_INSTANCE;
+export const TEST_TOKEN = API_TOKEN;
 export const TEST_API_URL = 'https://api.green-api.com';
 
 export type Reply =
