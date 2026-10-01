@@ -55,8 +55,13 @@ function Banner({
 }
 
 /**
- * Баннеры основного экрана (§4.0 п. 4): П-1…П-4, «Нет соединения», «Инстанс не авторизован…»,
- * suspended, квота, вкладки (Р-12), сбой хранилища (Р-2). Порядок — от блокирующих к информационным.
+ * Баннеры основного экрана (§4.0 п. 4) стопкой над лентой. Порядок — от блокирующих к
+ * информационным:
+ * 1. ошибки: П-1 (webhookUrl), «Нет соединения», «Инстанс не авторизован…»;
+ * 2. предупреждения: квота (§5.5), suspended, П-2…П-4 (закрываемые), сбой хранилища (Р-2),
+ *    нет Web Locks (Р-12);
+ * 3. информация: «Чат открыт в другой вкладке» (Р-12).
+ * П-5 появляется только с Д-4 (статусы доставки), в MVP его нет.
  */
 export function Banners() {
   const { state, controller } = useSession();
@@ -99,19 +104,6 @@ export function Banners() {
       {selectShowSuspendedBanner(state) ? (
         <Banner testId="banner-suspended" tone="warning" text={INSTANCE_TEXTS.suspended} />
       ) : null}
-      {state.readOnly ? (
-        <Banner testId="banner-other-tab" tone="info" text={BANNER_TEXTS.otherTab} />
-      ) : null}
-      {state.locksUnsupported ? (
-        <Banner
-          testId="banner-locks-unsupported"
-          tone="warning"
-          text={SESSION_TEXTS.locksUnsupported}
-        />
-      ) : null}
-      {state.storageFailed ? (
-        <Banner testId="banner-storage" tone="warning" text={SESSION_TEXTS.storageFailed} />
-      ) : null}
       {warnings.map((w) => (
         <Banner
           key={w}
@@ -123,6 +115,19 @@ export function Banners() {
           }}
         />
       ))}
+      {state.storageFailed ? (
+        <Banner testId="banner-storage" tone="warning" text={SESSION_TEXTS.storageFailed} />
+      ) : null}
+      {state.locksUnsupported ? (
+        <Banner
+          testId="banner-locks-unsupported"
+          tone="warning"
+          text={SESSION_TEXTS.locksUnsupported}
+        />
+      ) : null}
+      {state.readOnly ? (
+        <Banner testId="banner-other-tab" tone="info" text={BANNER_TEXTS.otherTab} />
+      ) : null}
     </div>
   );
 }
