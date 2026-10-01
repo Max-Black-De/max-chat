@@ -21,9 +21,231 @@ body {
   min-height: 100vh;
 }
 
-.app-placeholder {
+:root {
+  --c-bg: #ffffff;
+  --c-bg-muted: #f3f5f8;
+  --c-border: #e2e6ec;
+  --c-text-muted: #6b7380;
+  --c-accent: #2f6bff;
+  --c-accent-hover: #1f56e0;
+  --c-error-bg: #fdecec;
+  --c-error: #c62828;
+  --c-warning-bg: #fff6e0;
+  --c-warning: #8a5a00;
+  --c-info-bg: #eaf1ff;
+  --radius: 12px;
+}
+
+/* ---------- Кнопки и поля ---------- */
+
+.button {
+  font: inherit;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  background: none;
+  color: inherit;
+}
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.button--primary {
+  background: var(--c-accent);
+  color: #fff;
+}
+.button--primary:not(:disabled):hover {
+  background: var(--c-accent-hover);
+}
+.button--ghost {
+  border-color: var(--c-border);
+}
+.button--small {
+  padding: 4px 10px;
+  font-size: 0.875rem;
+  border-color: currentColor;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.field label {
+  font-size: 0.875rem;
+  color: var(--c-text-muted);
+}
+.field input {
+  font: inherit;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+.field input:focus {
+  outline: 2px solid var(--c-accent);
+  outline-offset: -1px;
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--c-error);
+}
+.field__row {
+  display: flex;
+  gap: 8px;
+}
+.field__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-text-muted);
+}
+.field__error {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-error);
+}
+.field__warning {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-warning);
+}
+
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 8px;
+  vertical-align: -0.15em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Вход (§4.0 п. 1) ---------- */
+
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  background: var(--c-bg-muted);
+}
+.login__card {
+  width: 400px;
+  padding: 32px;
+  background: var(--c-bg);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(16 24 40 / 8%);
+}
+.login__title {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+}
+.login__subtitle {
+  margin: 0 0 20px;
+  color: var(--c-text-muted);
+}
+.login__error {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--c-error-bg);
+  color: var(--c-error);
+}
+.login__advanced {
+  margin-bottom: 16px;
+}
+.login__advanced summary {
+  cursor: pointer;
+  margin-bottom: 10px;
+  color: var(--c-text-muted);
+}
+.login__submit {
+  width: 100%;
+  padding: 12px;
+}
+.login__link {
+  display: block;
+  margin-top: 16px;
+  text-align: center;
+  color: var(--c-accent);
+}
+
+/* ---------- Основной экран (§4.0 п. 2), каркас — финальный стиль в F6 ---------- */
+
+.main {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: 100vh;
+}
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-right: 1px solid var(--c-border);
+  background: var(--c-bg);
+}
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sidebar__instance {
+  font-weight: 600;
+}
+.content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--c-bg-muted);
+}
+.content__empty {
+  flex: 1;
   display: grid;
   place-content: center;
-  min-height: 100vh;
-  text-align: center;
+  color: var(--c-text-muted);
+}
+
+/* ---------- Баннеры (§4.0 п. 4) ---------- */
+
+.banners {
+  display: grid;
+  gap: 1px;
+}
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+}
+.banner__text {
+  flex: 1;
+  margin: 0;
+}
+.banner--error {
+  background: var(--c-error-bg);
+  color: var(--c-error);
+}
+.banner--warning {
+  background: var(--c-warning-bg);
+  color: var(--c-warning);
+}
+.banner--info {
+  background: var(--c-info-bg);
+}
+.banner__close {
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
 }
