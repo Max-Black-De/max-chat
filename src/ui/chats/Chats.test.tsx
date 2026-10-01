@@ -550,10 +550,18 @@ describe('сбой записи localStorage (Р-2, EC-D11)', () => {
     await waitFor(() => {
       expect(chatIds()).toEqual([TEST_CHAT_ID]);
     });
-    expect(screen.getByTestId('banner-storage')).toHaveTextContent(
+    // Запись идёт в эффекте после рендера — ждём баннер и предупреждение, а не первый кадр.
+    expect(await screen.findByTestId('banner-storage')).toHaveTextContent(
       'Не удаётся сохранить данные в браузере — после перезагрузки чаты и сообщения пропадут',
     );
-    expect(consoleWarn?.mock.calls).toHaveLength(1);
+    const storageWarns = () =>
+      (consoleWarn?.mock.calls ?? []).filter((c) => String(c[0]).startsWith('maxchat storage'));
+    await waitFor(() => {
+      expect(storageWarns()).toHaveLength(1);
+    });
+    // повторные записи (выбор чата) — без новых предупреждений
+    fireEvent.click(screen.getByTestId('chat-item'));
+    expect(storageWarns()).toHaveLength(1);
     expectNoPersonalDataInLogs(warn);
   });
 });
