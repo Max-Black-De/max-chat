@@ -11,4 +11,4 @@
  *
  * Покрытие тестами ≥ 80 % (НФТ-9, Д-2), фикстуры — с условными значениями (НФТ-11).
  */
-export {};
+export { extractMessageText, type ExtractedText } from './extractText';
