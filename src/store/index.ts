@@ -1,16 +1,19 @@
 /**
- * store/ — состояние приложения (задачи F2–F5, ТЗ Р-2, §6.3).
+ * store/ — состояние приложения (ТЗ Р-2, Р-9, §6.3).
  *
- * Будет содержать:
- * - сессию: учётные данные — **только** в памяти и sessionStorage (Р-2, НФТ-3);
- * - чаты, сообщения (`messages[]` + индекс `chatId_idMessage → localId`) и кеш
- *   «номер → chatId» — в localStorage под ключами `maxchat:<idInstance>:…` (Р-2);
- * - reducer / actions: создание чата, оптимистичная отправка и слияние (§6.3),
- *   счётчики непрочитанных (ОР-5 п. 5.2), баннеры.
+ * F2: сессия (`session.ts` — чистый редьюсер, `sessionController.ts` — эффекты), учётные
+ * данные в sessionStorage (`sessionCredentials.ts`), общая обёртка localStorage с версией схемы
+ * и режимами «только память» / «только чтение» (`storage.ts`), восстановление «отправляется»
+ * (`sendingRecovery.ts`). Чаты, сообщения и кеш «номер → chatId» — F3–F5 поверх `AppStorage`.
  *
- * Выбор реализации — Zustand с `persist` или Context + useReducer (Р-9) — за F3.
- * Токен в localStorage не пишется никогда.
+ * Стор (Р-9): Context + `useReducer` (обоснование — README.md рядом). Токен в localStorage
+ * не пишется никогда.
  */
-
-/** Префикс ключей localStorage (Р-2): `${STORAGE_PREFIX}:<idInstance>:<раздел>`. */
-export const STORAGE_PREFIX = 'maxchat';
+export { STORAGE_PREFIX } from './constants';
+export * from './session';
+export * from './sessionController';
+export * from './sessionCredentials';
+export * from './storage';
+export * from './loginForm';
+export * from './sendingRecovery';
+export * from './texts';
