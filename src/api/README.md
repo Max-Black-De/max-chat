@@ -1,6 +1,6 @@
 # api/ — клиент GREEN-API (F1)
 
-Типизированный клиент для 6 методов GREEN-API (ТЗ v1.2 §5.2). Чистый TypeScript без React и без
+Типизированный клиент для 6 методов GREEN-API (ТЗ §5.2). Чистый TypeScript без React и без
 runtime-зависимостей (только `fetch`, `AbortController`). Типы контракта — `types.ts` (A1), константы —
 `constants.ts`, опции и результаты клиента — `clientTypes.ts`.
 
@@ -104,12 +104,12 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 уведомления из очереди (без `timestamp`). `description` (там чужие chatId) **не сохраняется** нигде — ни в
 `QuotaSummary`, ни в `message`, ни в логах; в лог идут только `method/used/total/status`.
 
-**Тексты для UI** (`messages.ts`) — дословно из ТЗ v1.3.1, константы `LOGIN_FORM_TEXTS`, `AUTH_TEXTS`,
+**Тексты для UI** (`messages.ts`) — дословно из ТЗ v1.3.4, константы `LOGIN_FORM_TEXTS`, `AUTH_TEXTS`,
 `INSTANCE_TEXTS`, `BANNER_TEXTS`, `SETTINGS_TEXTS` (П-1…П-5), `CHECK_ACCOUNT_TEXTS`, `SEND_TEXTS`, `QUOTA_TEXTS`;
 функции `describeError(err, 'login' | 'session' | 'checkAccount' | 'send')`, `quotaText()`,
 `shouldShowQuotaBanner()` (только `chats`, ВА-13), `stateInstanceText()`, `isLoginAllowed()`, `unreachableText()`.
-`FALLBACK_TEXTS` — строки, которых в ТЗ нет (например, 429 у send после повторов). Тест `messages.test.ts`
-сверяет каждую строку с ТЗ посимвольно.
+`FALLBACK_TEXTS` — строки, которых в ТЗ нет (отмена, «Неизвестная ошибка» и т. п.). Тест `messages.test.ts`
+сверяет каждую строку с эталонами, скопированными из ТЗ, посимвольно (файл ТЗ в репозиторий не входит).
 
 ## Токен
 

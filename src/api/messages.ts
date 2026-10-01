@@ -5,9 +5,9 @@ import type { StateInstanceResult } from './clientTypes';
 type StateInstance = StateInstanceResult['stateInstance'];
 
 /**
- * Тексты для пользователя — дословно из ТЗ v1.3.1 (§4.1–§4.5, §5.4, §5.5, Р-11, Р-12).
- * Тест `texts.test.ts` сверяет каждую строку с файлом ТЗ. Шаблоны с подстановкой —
- * функции; их неизменные части тоже в константах. Ни один текст не содержит токен;
+ * Тексты для пользователя — дословно из ТЗ v1.3.4 (§4.1–§4.5, §5.4, §5.5, Р-11, Р-12).
+ * Тест `__tests__/messages.test.ts` сверяет каждую строку с эталонами, скопированными из ТЗ.
+ * Шаблоны с подстановкой — функции; их неизменные части тоже в константах. Ни один текст не содержит токен;
  * `description` из 466 и `quotaExceeded` не используется (там чужие chatId).
  */
 
@@ -96,7 +96,7 @@ export const CHECK_ACCOUNT_TEXTS = {
 /** Максимум символов текста сервера в «Ошибка в запросе: …» (п. 2.8). */
 export const SERVER_REASON_MAX = 200;
 
-/** sendMessage (§4.3 п. 3.4, 3.6, ВА-9, ВА-10, ВА-20). */
+/** sendMessage (§4.3 п. 3.4, 3.6, ВА-8, ВА-9, ВА-10, ВА-20). */
 export const SEND_TEXTS = {
   suspended: 'Аккаунт ограничен: отправка только контактам',
   statusUnknown:
@@ -105,6 +105,8 @@ export const SEND_TEXTS = {
   /** Части шаблона «Не отправлено: ошибка в запросе (<текст сервера>)». */
   badRequestPrefix: 'Не отправлено: ошибка в запросе (',
   badRequestSuffix: ')',
+  /** 429 после исчерпания автоповторов (п. 3.4, v1.3.4). */
+  rateLimited: 'Не отправлено: слишком много запросов. Повторите через несколько секунд',
 } as const;
 
 /** Квота Developer (§5.5, ВА-12, ВА-13). */
@@ -128,8 +130,6 @@ export const QUOTA_TEXTS = {
  * Не участвуют в посимвольной сверке с ТЗ.
  */
 export const FALLBACK_TEXTS = {
-  /** sendMessage 429 после 3 автоповторов: в п. 3.4 сказано только «не отправлено». */
-  sendRateLimited: 'Не отправлено: слишком много запросов. Повторите через несколько секунд',
   sendGeneric: 'Не отправлено',
   generic: 'Ошибка сервера GREEN-API, повторите позже',
   aborted: 'Запрос отменён',
@@ -284,7 +284,7 @@ export function describeError(error: unknown, context: ErrorContext): string {
         case C.UNEXPECTED_RESPONSE:
           return SEND_TEXTS.statusUnknown;
         case C.RATE_LIMITED:
-          return FALLBACK_TEXTS.sendRateLimited;
+          return SEND_TEXTS.rateLimited;
         case C.INVALID_ARGUMENT:
           return FALLBACK_TEXTS.invalidArgument;
         default:

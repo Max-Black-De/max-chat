@@ -31,8 +31,8 @@ const err = (
 ) => new GreenApiError({ code, method: 'getStateInstance', retry: 'none', ...extra });
 
 /**
- * Эталон — строки, скопированные из ТЗ v1.3.1 (/workspace/reports/green-api-max-tz.md).
- * Константы в messages.ts должны совпадать с ними посимвольно.
+ * Эталон — строки, скопированные из ТЗ v1.3.4 (вручную, посимвольно). Тест не читает файл ТЗ:
+ * его нет в репозитории. Константы в messages.ts должны совпадать с эталоном посимвольно.
  */
 const TZ = {
   // §4.1 п. 1.2 (ВА-2)
@@ -85,6 +85,8 @@ const TZ = {
   sendUnknown:
     'Статус неизвестен: возможно, сообщение уже доставлено. Проверьте в MAX, прежде чем повторять',
   sendNotReady: 'Не отправлено: инстанс не авторизован или запускается',
+  // п. 3.4 (v1.3.4): 429 после исчерпания автоповторов
+  send429: 'Не отправлено: слишком много запросов. Повторите через несколько секунд',
   // §5.5 (ВА-12, ВА-13)
   qSend:
     'Не отправлено: исчерпан лимит бесплатного тарифа Developer — не больше 3 чатов в месяц, этот чат в него не входит. Напишите в уже используемый чат или смените тариф в личном кабинете GREEN-API',
@@ -150,6 +152,7 @@ describe('константы текстов совпадают с ТЗ поси�
     expect(SEND_TEXTS.suspended).toBe(TZ.sendSuspended);
     expect(SEND_TEXTS.statusUnknown).toBe(TZ.sendUnknown);
     expect(SEND_TEXTS.instanceNotReady).toBe(TZ.sendNotReady);
+    expect(SEND_TEXTS.rateLimited).toBe(TZ.send429);
     expect(QUOTA_TEXTS.sendChats).toBe(TZ.qSend);
     expect(QUOTA_TEXTS.checkAccountChats).toBe(TZ.qCheckChats);
     expect(QUOTA_TEXTS.checkAccountChecks).toBe(TZ.qCheckChecks);
@@ -253,10 +256,8 @@ describe('describeError: sendMessage (п. 3.4, 3.6)', () => {
       ),
     ).toBe('Не отправлено: ошибка в запросе (Validation failed)');
   });
-  it('429 после исчерпания автоповторов — текст фронтенда (в ТЗ не задан)', () => {
-    expect(describeError(err(C.RATE_LIMITED, { method: 'sendMessage' }), ctx)).toBe(
-      FALLBACK_TEXTS.sendRateLimited,
-    );
+  it('429 после исчерпания автоповторов — текст п. 3.4 (v1.3.4)', () => {
+    expect(describeError(err(C.RATE_LIMITED, { method: 'sendMessage' }), ctx)).toBe(TZ.send429);
   });
 });
 
