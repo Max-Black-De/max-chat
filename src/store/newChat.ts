@@ -17,11 +17,11 @@ import {
   describeError,
   isGreenApiError,
   normalizePhone,
+  redactPersonalData,
   type ChatId,
   type GreenApiClient,
 } from '../api';
 import { findCachedChat, type ChatsState } from './chats';
-import { redactIdentifiers } from './privacy';
 import { SESSION_TEXTS } from './texts';
 
 export type NewChatFailure =
@@ -78,7 +78,7 @@ export async function resolveNewChat(input: string, deps: NewChatDeps): Promise<
     return {
       ok: false,
       reason: 'api',
-      error: redactIdentifiers(describeError(e, 'checkAccount')),
+      error: redactPersonalData(describeError(e, 'checkAccount')),
       phone,
     };
   }

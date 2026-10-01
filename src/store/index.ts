@@ -22,4 +22,3 @@ export * from './chatsStorage';
 export * from './messagesStorage';
 export * from './newChat';
 export * from './phoneFormat';
-export * from './privacy';

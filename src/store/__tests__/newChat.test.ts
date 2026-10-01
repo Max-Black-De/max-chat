@@ -234,7 +234,7 @@ describe('ответы checkAccount (п. 2.6–2.8, §5.5, ВА-7, ВА-10)', ()
     ]);
     expect(result).toMatchObject({
       ok: false,
-      error: 'Ошибка в запросе: Validation failed: *** / ***',
+      error: 'Ошибка в запросе: Validation failed: <id> / <id>',
     });
   });
 
