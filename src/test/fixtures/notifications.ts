@@ -28,6 +28,8 @@ import type {
 import {
   BASE_TIMESTAMP,
   CHAT_IDS,
+  FOREIGN_ID_INSTANCE_NUMBER,
+  ID_INSTANCE,
   ID_INSTANCE_NUMBER,
   ID_MESSAGES,
   MEDIA_URL_BASE,
@@ -481,6 +483,36 @@ export const statusDelivered = outgoingStatus('delivered');
 export const statusRead = outgoingStatus('read');
 export const statusFailed = outgoingStatus('failed');
 export const statusNoAccount = outgoingStatus('noAccount');
+/** [док] Для групп; в нашем скоупе не встретится. */
+export const statusNotInGroup = outgoingStatus('notInGroup');
+
+/**
+ * Д-4, EC-ST3: порядок статусов не гарантируется — `read` раньше `delivered`.
+ * Ожидание (Д-4): без понижения, итог `read`. В MVP оба удаляются без обработки (V-18).
+ */
+export const statusesReadBeforeDelivered = [
+  receipt({ ...outgoingStatus('read'), timestamp: BASE_TIMESTAMP + 31 }, 40),
+  receipt({ ...outgoingStatus('delivered'), timestamp: BASE_TIMESTAMP + 30 }, 41),
+] as const satisfies readonly ReceivedNotification[];
+
+/** EC-ST2: статус пришёл раньше ответа sendMessage и раньше `outgoingAPIMessageReceived`. */
+export const statusBeforeMessage = receipt(outgoingStatus('delivered', ID_MESSAGES.apiRace), 42);
+
+/** EC-ST5: статус для ключа, которого нет (сообщения не было) — не создаёт сообщение. */
+export const statusUnknownKey = outgoingStatus('read', ID_MESSAGES.api2);
+
+/**
+ * **Негативный кейс:** статуса `sent` в вебхуке нет [док OutgoingMessageStatus], это
+ * неизвестное значение — удалить без обработки и без исключения. Вне контракта (`unknown`).
+ * В спайке `outgoingMessageStatus` не встречался (`outgoingWebhook=no`), формат — [док].
+ */
+export const statusUnknownSent: unknown = { ...outgoingStatus('delivered'), status: 'sent' };
+export const statusUnknownValue: unknown = { ...outgoingStatus('delivered'), status: 'pending' };
+/** `chatId` в `senderData`, а не на верхнем уровне — не по документации, вне контракта. */
+export const statusChatIdInSenderData: unknown = (() => {
+  const { chatId, ...rest } = outgoingStatus('delivered');
+  return { ...rest, senderData: { chatId } };
+})();
 
 export const stateChangedAuthorized = {
   typeWebhook: 'stateInstanceChanged',
@@ -653,3 +685,38 @@ export const queueBeforeLogin = [
   receipt(outgoingPhone, 304),
   receipt(channelImage, 305),
 ] as const;
+
+// --- EC-I7: чужой idInstance и поздние ответы старой сессии -------------------------------
+
+/** `instanceData` другого инстанса (условная соседняя заглушка). */
+export const foreignInstanceData = {
+  ...instanceData,
+  idInstance: FOREIGN_ID_INSTANCE_NUMBER,
+} satisfies InstanceData;
+
+/**
+ * EC-I7 (Р-5): уведомление с чужим `idInstance` в известный чат — не показывать,
+ * удалить (иначе очередь встанет), в лог только тип. Сравнение — строками.
+ */
+export const foreignInstanceIncoming = {
+  ...incomingMessage({ idMessage: ID_MESSAGES.incoming2 }),
+  instanceData: foreignInstanceData,
+} satisfies IncomingMessageReceived;
+
+export const foreignInstanceOutgoingApi = {
+  ...outgoingApi,
+  instanceData: foreignInstanceData,
+} satisfies OutgoingAPIMessageReceived;
+
+/** То же, но `idInstance` строкой — сравнение строковое, это **наш** инстанс (EC-I2). */
+export const ownInstanceAsString: unknown = {
+  ...incomingText,
+  instanceData: { ...instanceData, idInstance: ID_INSTANCE },
+};
+
+/**
+ * EC-I7 / EC-S7 (§6.1 п. 3): ответ receive, который придёт **после** выхода или смены
+ * сессии. Тест держит ответ (задержка в моке), выходит, затем отпускает: уведомление
+ * не показывается и `deleteNotification` для `receiptId` 77 не вызывается.
+ */
+export const lateSessionNotification = receipt(incomingText, 77);

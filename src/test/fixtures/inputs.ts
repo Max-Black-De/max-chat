@@ -38,6 +38,25 @@ export const apiUrlInputs = {
   javascript: { input: 'javascript:alert(1)', expected: null },
   /** Хост, который не резолвится (L-10, ошибка сети при входе). */
   unreachable: { input: 'https://invalid.example.test', expected: 'https://invalid.example.test' },
+  /** EC-T8 [док request-format]: префикс `/v3` допустим. */
+  withV3: { input: 'https://api.green-api.com/v3', expected: 'https://api.green-api.com/v3' },
+} as const;
+
+/**
+ * EC-T9 (ТЗ п. 1.2): неблокирующее предупреждение, если хост не `green-api.com`,
+ * не `greenapi.com` и не их поддомен. `warn: true` — предупреждение есть, вход не блокируется.
+ */
+export const apiUrlHostCases = {
+  defaultHost: { input: 'https://api.green-api.com', warn: false },
+  instanceSubdomain: { input: API_URL, warn: false },
+  apexGreenApi: { input: 'https://green-api.com', warn: false },
+  /** [док using-green-api-hosts]: домен greenapi.com тоже используется. */
+  greenapiCom: { input: 'https://api.greenapi.com', warn: false },
+  upperCase: { input: 'https://API.GREEN-API.COM', warn: false },
+  otherHost: { input: 'https://proxy.example.test', warn: true },
+  /** Похоже, но не поддомен: суффикс проверяется по границе точки. */
+  lookalikeSuffix: { input: 'https://green-api.com.example.test', warn: true },
+  lookalikePrefix: { input: 'https://my-green-api.example.test', warn: true },
 } as const;
 
 /** Номер телефона (Р-10). `expected: null` — ошибка формата, checkAccount не вызывается. */
@@ -85,4 +104,20 @@ export const messageTexts = {
   emoji4001: `${'😀'.repeat(2000)}а`,
   /** Пробелы по краям не обрезаются при отправке (ВА-14). */
   surroundingSpaces: '  текст  ',
+  /** EC-U2: ZWJ-последовательность — 8 единиц UTF-16. */
+  zwjFamily: '👨‍👩‍👧',
+  /** EC-U5: длинное слово без пробелов — перенос внутри слова, вёрстка не ломается. */
+  longWord: 'Тестовоедлинноеслово'.repeat(20),
+  /** EC-U5: длинная ссылка без пробелов. */
+  longUrl: `https://example.test/${'path/'.repeat(60)}end`,
+  /** EC-U5: управляющий bidi-символ U+202E — не должен «переворачивать» соседние элементы. */
+  bidiOverride: 'Тест \u202Eтекст справа налево\u202C конец',
+  /** EC-U5: текст на иврите (RTL) в своём пузыре — пузырь всё равно справа. */
+  rtlText: 'שלום עולם',
+  /**
+   * EC-U3: превью с emoji на границе обрезки — обрезка CSS (`text-overflow: ellipsis`);
+   * если в JS — по кодовым точкам, без «�».
+   */
+  previewEmojiBoundary: `${'а'.repeat(39)}😀${'б'.repeat(40)}`,
+  previewOnlyEmoji: '😀'.repeat(100),
 } as const;

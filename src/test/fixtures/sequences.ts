@@ -118,6 +118,22 @@ export const sendMessageNoRetrySequences = {
     expectedDelaysSec: [],
     outcome: 'error',
   },
+  /**
+   * Р-27: 429 без CORS-заголовков → в браузере `TypeError`, ветка «сеть»: без автоповтора,
+   * текст «Статус неизвестен…» (ВА-20). Playwright — ответ без ACAO; Vitest — `toFetchResult`.
+   */
+  tooManyRequestsNoCors: {
+    replies: [tooManyRequestsResponses.noCors, sendMessageResponses.sent],
+    expectedCalls: 1,
+    expectedDelaysSec: [],
+    outcome: 'error',
+  },
+  tooManyRequestsNoCorsRetryAfter: {
+    replies: [tooManyRequestsResponses.noCorsRetryAfter2s, sendMessageResponses.sent],
+    expectedCalls: 1,
+    expectedDelaysSec: [],
+    outcome: 'error',
+  },
 } as const satisfies Record<string, ReplySequence>;
 
 /** ВА-7, C-19: checkAccount — без автоповтора ни при какой ошибке. Второй ответ не должен быть запрошен. */
@@ -160,6 +176,13 @@ export const checkAccountNoRetrySequences = {
   },
   timeout: {
     replies: [networkTimeout, checkAccountResponses.exists],
+    expectedCalls: 1,
+    expectedDelaysSec: [],
+    outcome: 'error-network',
+  },
+  /** Р-27: 429 без CORS → текст про сеть, не про 429. */
+  tooManyRequestsNoCors: {
+    replies: [tooManyRequestsResponses.noCors, checkAccountResponses.exists],
     expectedCalls: 1,
     expectedDelaysSec: [],
     outcome: 'error-network',

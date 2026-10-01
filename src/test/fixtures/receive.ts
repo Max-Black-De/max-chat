@@ -12,7 +12,7 @@ import type {
   ReceivedNotification,
 } from '../../api/types';
 import { errorResponses } from './errors';
-import { emptyResponse, jsonResponse, type MockHttpResponse } from './http';
+import { emptyResponse, jsonResponse, rawJsonResponse, type MockHttpResponse } from './http';
 import { incomingText, receipt } from './notifications';
 
 /** Ответ receive с уведомлением. */
@@ -66,3 +66,16 @@ export const deleteResponses = {
   receiptIdNotNumber400: errorResponses.receiptIdNotNumber400.json,
   customWebhook400: errorResponses.customWebhook400.json,
 } as const satisfies Record<string, MockHttpResponse>;
+
+/**
+ * EC-I3: `receiptId` больше `Number.MAX_SAFE_INTEGER` (2^53 + 2). Величина реальных
+ * `receiptId` не подтверждена. Ожидание: удалить нельзя → ошибка формата и backoff,
+ * без бесконечного быстрого цикла. Тело — сырая строка: `JSON.stringify` числа не сохранит.
+ */
+export const unsafeReceiptIdResponse = rawJsonResponse(
+  `{"receiptId":9007199254740994,"body":${JSON.stringify(incomingText)}}`,
+);
+/** Граница: 2^53 − 1 — ещё safe integer, удаляется как обычно. */
+export const maxSafeReceiptIdResponse = notificationResponse(
+  receipt(incomingText, Number.MAX_SAFE_INTEGER),
+);

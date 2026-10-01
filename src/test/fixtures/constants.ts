@@ -12,6 +12,13 @@
 export const ID_INSTANCE = '1101000000';
 export const ID_INSTANCE_NUMBER = 1101000000;
 
+/**
+ * Чужой idInstance для EC-I7 (уведомление не нашего инстанса — не показывать, удалить).
+ * Соседняя заглушка, не реальный инстанс.
+ */
+export const FOREIGN_ID_INSTANCE = '1101000001';
+export const FOREIGN_ID_INSTANCE_NUMBER = 1101000001;
+
 /** Условный токен. Никогда не настоящий. */
 export const API_TOKEN = 'your-api-token';
 

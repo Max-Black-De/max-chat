@@ -12,7 +12,7 @@ import type {
   StatusFalseResponse,
 } from '../../api/types';
 import { CHAT_IDS, PHONES } from './constants';
-import { jsonResponse, type MockHttpResponse } from './http';
+import { emptyResponse, jsonResponse, type MockHttpResponse } from './http';
 
 /** Тело запроса: `phoneNumber` — **число** (C-05). */
 export const checkAccountRequest = { phoneNumber: PHONES.primary } satisfies CheckAccountRequest;
@@ -89,3 +89,40 @@ export const checkAccountResponses = {
   statusFalseLimit200: jsonResponse(checkStatusFalseLimit, 200),
   statusFalseLimit400: jsonResponse(checkStatusFalseLimit, 400),
 } as const satisfies Record<string, MockHttpResponse>;
+
+/**
+ * EC-I9 (ТЗ п. 2.6): неожиданные формы ответа checkAccount — в документации не описаны.
+ * Ожидание для всех: «Не удалось проверить номер: неожиданный ответ сервера. Попробуйте позже»,
+ * чат не создаётся, кеш не пишется, автоповтора нет. Типизированы как `unknown`: вне контракта.
+ */
+export const checkAccountUnexpectedBodies = {
+  existTrueEmptyChatId: { exist: true, chatId: '', fromCache: false },
+  existTrueNoChatId: { exist: true, fromCache: false },
+  existTrueNumericChatId: { exist: true, chatId: Number(CHAT_IDS.primary), fromCache: false },
+  existTrueNullChatId: { exist: true, chatId: null, fromCache: false },
+  existTrueCUsChatId: { exist: true, chatId: `${String(PHONES.primary)}@c.us`, fromCache: false },
+  existTrueNonDigitChatId: { exist: true, chatId: 'abc', fromCache: false },
+  existTrueSpacedChatId: { exist: true, chatId: ' 10000000', fromCache: false },
+  noExistField: { chatId: CHAT_IDS.primary, fromCache: false },
+  existAsString: { exist: 'true', chatId: CHAT_IDS.primary, fromCache: false },
+  emptyObject: {},
+  jsonNull: null,
+  jsonArray: [],
+} as const satisfies Record<string, unknown>;
+
+export const checkAccountUnexpectedResponses = {
+  ...(Object.fromEntries(
+    Object.entries(checkAccountUnexpectedBodies).map(([name, body]) => [name, jsonResponse(body)]),
+  ) as Record<keyof typeof checkAccountUnexpectedBodies, MockHttpResponse>),
+  /** 200 с пустым телом. */
+  emptyBody: emptyResponse(200),
+} satisfies Record<string, MockHttpResponse>;
+
+/**
+ * Контроль к EC-I9: валидные формы, которые **не** должны давать «неожиданный ответ».
+ * У групп допустим ведущий `-` (ТЗ п. 2.6), хотя группы вне скоупа.
+ */
+export const checkAccountValidEdgeBodies = {
+  groupLikeChatId: { exist: true, chatId: CHAT_IDS.group, fromCache: false },
+  existFalseNoChatId: { exist: false },
+} as const satisfies Record<string, unknown>;

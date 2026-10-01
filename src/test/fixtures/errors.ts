@@ -18,6 +18,7 @@ import {
   rawJsonResponse,
   textResponse,
   type MockHttpResponse,
+  withoutCors,
 } from './http';
 
 export type ErrorBodyFormat = 'json' | 'text';
@@ -145,9 +146,14 @@ export const errorResponses = {
  * в Playwright; мок `fetch` в Vitest видит все заголовки, там различие не воспроизводится.
  */
 export function tooManyRequests(
-  options: { retryAfter?: string; exposeRetryAfter?: boolean } = {},
+  options: { retryAfter?: string; exposeRetryAfter?: boolean; cors?: boolean } = {},
 ): MockHttpResponse {
   const response = emptyResponse(429);
+  if (options.cors === false) {
+    const noCors = withoutCors(response);
+    if (options.retryAfter !== undefined) noCors.headers['Retry-After'] = options.retryAfter;
+    return noCors;
+  }
   if (options.retryAfter !== undefined) {
     response.headers['Retry-After'] = options.retryAfter;
     if (options.exposeRetryAfter !== false) {
@@ -172,4 +178,12 @@ export const tooManyRequestsResponses = {
   retryAfterGarbage: tooManyRequests({ retryAfter: 'soon' }),
   /** Заголовок есть, но не открыт через Expose-Headers — браузер его не видит. */
   retryAfterHidden: tooManyRequests({ retryAfter: '2', exposeRetryAfter: false }),
+  /**
+   * Р-27: 429 **без CORS-заголовков** (прокси/балансировщик) [не подтверждено на реальном API].
+   * В браузере — `TypeError`, т. е. ветка «сеть»: sendMessage без автоповтора (ВА-8, ВА-20),
+   * checkAccount — текст про сеть (ВА-7). Vitest: `toFetchResult` → `TypeError`.
+   */
+  noCors: tooManyRequests({ cors: false }),
+  /** То же с `Retry-After: 2` — заголовок всё равно не виден, повтора нет. */
+  noCorsRetryAfter2s: tooManyRequests({ retryAfter: '2', cors: false }),
 } as const satisfies Record<string, MockHttpResponse>;

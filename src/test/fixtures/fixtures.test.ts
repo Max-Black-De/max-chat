@@ -29,10 +29,11 @@ const ALLOWED_NAMES = new Set<string>([...Object.values(fixtures.NAMES), '']);
 const ALLOWED_DIGIT_RUNS: readonly RegExp[] = [
   /^7?9990000\d{2,5}$/, // номера 7999000000x и их невалидные варианты
   /^3752900000\d{0,2}$/, // номер РБ
-  /^1101000000$/, // idInstance
+  /^110100000[01]$/, // idInstance: свой и чужой (EC-I7)
   /^1000000\d$/, // личные chatId 10000000…10000009
   /^10000000000000\d{1,4}$/, // группы/каналы (15 цифр) и 18-значные idMessage
   /^1790000\d{3}(\d{3})?$/, // timestamp (10 цифр) и API idMessage (13 цифр)
+  /^900719925474099[1-4]$/, // EC-I3: receiptId около 2^53
 ];
 
 /** Адреса с @: свой wid, запрещённый формат chatId и шаблон из текста ошибки сервера. */
@@ -46,9 +47,16 @@ const ALLOWED_HOSTS = new Set([
   'api.green-api.com', // общий хост (A2)
   '1101.api.green-api.com', // условный apiUrl фикстур
   '3100.api.green-api.com', // только в подсказке ТЗ «Введите адрес вида …»
+  'green-api.com', // EC-T9: хосты без предупреждения
+  'api.greenapi.com',
 ]);
-const isAllowedHost = (host: string) =>
-  ALLOWED_HOSTS.has(host) || host === 'example.test' || host.endsWith('.example.test');
+
+/** Заведомо неверные chatId из EC-I9 (ответ checkAccount вне контракта). */
+const INVALID_CHAT_ID_SAMPLES = new Set(['abc', ' 10000000']);
+const isAllowedHost = (rawHost: string) => {
+  const host = rawHost.toLowerCase();
+  return ALLOWED_HOSTS.has(host) || host === 'example.test' || host.endsWith('.example.test');
+};
 
 const ID_MESSAGE_PATTERN = /^(1000000000000\d{5}|1790000\d{6})$/;
 
@@ -111,7 +119,9 @@ function violations(visit: Visit): string[] {
       if (!isAllowedHost(host)) problems.push(`${path}: ссылка на хост ${host}`);
     }
     if (['chatId', 'sender', 'participant', 'from'].includes(key) && !ALLOWED_CHAT_IDS.has(value)) {
-      if (value !== fixtures.FORBIDDEN_C_US_CHAT_ID) problems.push(`${path}: chatId ${value}`);
+      if (value !== fixtures.FORBIDDEN_C_US_CHAT_ID && !INVALID_CHAT_ID_SAMPLES.has(value)) {
+        problems.push(`${path}: chatId ${value}`);
+      }
     }
     if (['idMessage', 'stanzaId'].includes(key) && !ID_MESSAGE_PATTERN.test(value)) {
       problems.push(`${path}: idMessage ${value}`);
@@ -132,7 +142,11 @@ function violations(visit: Visit): string[] {
     if (['senderPhoneNumber', 'phoneNumber', 'phone'].includes(key) && !ALLOWED_PHONES.has(value)) {
       problems.push(`${path}: номер ${String(value)}`);
     }
-    if (key === 'idInstance' && value !== fixtures.ID_INSTANCE_NUMBER) {
+    const allowedIdInstances: number[] = [
+      fixtures.ID_INSTANCE_NUMBER,
+      fixtures.FOREIGN_ID_INSTANCE_NUMBER,
+    ];
+    if (key === 'idInstance' && !allowedIdInstances.includes(value)) {
       problems.push(`${path}: idInstance ${String(value)}`);
     }
     if (Number.isInteger(value) && Math.abs(value) >= 1_000_000) {
@@ -200,10 +214,32 @@ describe('fixtures: mock responses', () => {
       typeof visit.value === 'object' && visit.value !== null && isMockResponse(visit.value),
   );
 
-  it('all carry Access-Control-Allow-Origin: *', () => {
+  it('all carry Access-Control-Allow-Origin: *, except deliberate no-CORS variants', () => {
     expect(responses.length).toBeGreaterThan(50);
-    const missing = responses.filter((r) => r.value.headers['Access-Control-Allow-Origin'] !== '*');
+    const noCorsVariants = new Set<MockHttpResponse>([
+      fixtures.tooManyRequestsResponses.noCors,
+      fixtures.tooManyRequestsResponses.noCorsRetryAfter2s,
+    ]);
+    const missing = responses.filter(
+      (r) => !noCorsVariants.has(r.value) && r.value.headers['Access-Control-Allow-Origin'] !== '*',
+    );
     expect(missing.map((r) => r.path)).toEqual([]);
+    const noCors = responses.filter((r) => noCorsVariants.has(r.value));
+    expect(noCors.length).toBeGreaterThanOrEqual(2);
+    expect(noCors.filter((r) => fixtures.hasCors(r.value)).map((r) => r.path)).toEqual([]);
+  });
+
+  it('emulate the browser for fetch mocks: no CORS or network failure → TypeError (Р-27)', async () => {
+    await expect(fixtures.toFetchResult(fixtures.tooManyRequestsResponses.noCors)).rejects.toThrow(
+      TypeError,
+    );
+    await expect(fixtures.toFetchResult(fixtures.networkError)).rejects.toThrow(TypeError);
+    const ok = await fixtures.toFetchResult(fixtures.tooManyRequestsResponses.retryAfter2s);
+    expect(ok.status).toBe(429);
+    expect(ok.headers.get('retry-after')).toBe('2');
+    const stripped = fixtures.withoutCors(fixtures.sendMessageResponses.sent);
+    expect(fixtures.hasCors(stripped)).toBe(false);
+    expect(stripped.headers['Content-Type']).toBe('application/json');
   });
 
   it('JSON bodies parse, except the deliberately broken one', () => {
@@ -304,6 +340,35 @@ describe('fixtures: contract shapes (§5)', () => {
       'quotaData.method',
       'correspondents',
     );
+  });
+
+  it('model outgoing statuses per Д-4: no `sent`, chatId on top level, any order', () => {
+    const allowed = ['delivered', 'read', 'failed', 'noAccount', 'notInGroup'];
+    const typed = [
+      fixtures.statusDelivered,
+      fixtures.statusRead,
+      fixtures.statusFailed,
+      fixtures.statusNoAccount,
+      fixtures.statusNotInGroup,
+      fixtures.statusUnknownKey,
+    ];
+    expect(typed.every((s) => allowed.includes(s.status))).toBe(true);
+    expect(typed.every((s) => s.chatId === fixtures.CHAT_IDS.primary)).toBe(true);
+    expect(fixtures.statusUnknownSent).toHaveProperty('status', 'sent');
+    const [first, second] = fixtures.statusesReadBeforeDelivered;
+    expect(first.body).toHaveProperty('status', 'read');
+    expect(second.body).toHaveProperty('status', 'delivered');
+    expect(fixtures.statusChatIdInSenderData).not.toHaveProperty('chatId');
+  });
+
+  it('cover EC-I7 (foreign idInstance) and EC-I9 (unexpected checkAccount)', () => {
+    expect(String(fixtures.foreignInstanceIncoming.instanceData.idInstance)).toBe(
+      fixtures.FOREIGN_ID_INSTANCE,
+    );
+    expect(fixtures.FOREIGN_ID_INSTANCE).not.toBe(fixtures.ID_INSTANCE);
+    expect(fixtures.foreignInstanceIncoming.senderData.chatId).toBe(fixtures.CHAT_IDS.primary);
+    expect(Object.keys(fixtures.checkAccountUnexpectedResponses).length).toBeGreaterThanOrEqual(12);
+    expect(fixtures.apiUrlHostCases.lookalikeSuffix.warn).toBe(true);
   });
 
   it('reject http:// apiUrl and expired/deleted instance cases exist', () => {

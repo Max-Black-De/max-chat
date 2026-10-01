@@ -16,3 +16,4 @@ export * from './quota';
 export * from './notifications';
 export * from './receive';
 export * from './sequences';
+export * from './storage';

@@ -8,7 +8,11 @@
  * в e2e не дал бы прочитать ответ.
  */
 
-/** Ответ мока. `body` — уже сериализованная строка (`''` — пустое тело). */
+/**
+ * Ответ мока. `body` — уже сериализованная строка (`''` — пустое тело).
+ * Ответ без `Access-Control-Allow-Origin` (см. `withoutCors`) браузер прочитать не даст:
+ * в Playwright это `TypeError: Failed to fetch`, в Vitest — см. `toFetchResult`.
+ */
 export interface MockHttpResponse {
   status: number;
   headers: Record<string, string>;
@@ -69,6 +73,27 @@ export function rawJsonResponse(body: string, status = 200): MockHttpResponse {
   return { status, headers: { ...JSON_HEADERS }, body };
 }
 
+/**
+ * Тот же ответ без CORS-заголовков (`Access-Control-Allow-Origin`, `…-Expose-Headers`).
+ * Так может ответить прокси или балансировщик, например на 429 (Р-27, [не подтверждено]).
+ * Браузер такой ответ не отдаёт странице — для приложения это ветка «сеть».
+ */
+export function withoutCors(response: MockHttpResponse): MockHttpResponse {
+  const headers = Object.fromEntries(
+    Object.entries(response.headers).filter(
+      ([name]) => !name.toLowerCase().startsWith('access-control-'),
+    ),
+  );
+  return { ...response, headers };
+}
+
+/** Есть ли у ответа `Access-Control-Allow-Origin` (иначе браузер его не отдаст). */
+export function hasCors(response: MockHttpResponse): boolean {
+  return Object.keys(response.headers).some(
+    (name) => name.toLowerCase() === 'access-control-allow-origin',
+  );
+}
+
 export function isNetworkFailure(reply: MockReply): reply is MockNetworkFailure {
   return 'abort' in reply;
 }
@@ -90,3 +115,15 @@ export const networkTimeout = { abort: 'timedout' } as const satisfies MockNetwo
 export const connectionRefused = {
   abort: 'connectionrefused',
 } as const satisfies MockNetworkFailure;
+
+/**
+ * Что увидит код приложения в браузере, для мока `fetch` в Vitest:
+ * сетевой сбой и ответ без CORS-заголовков → `fetch` отклоняется с `TypeError`
+ * (как `Failed to fetch` в Chromium), иначе — `Response`.
+ */
+export function toFetchResult(reply: MockReply): Promise<Response> {
+  if (isNetworkFailure(reply) || !hasCors(reply)) {
+    return Promise.reject(new TypeError('Failed to fetch'));
+  }
+  return Promise.resolve(toFetchResponse(reply));
+}
