@@ -3,7 +3,9 @@
  * в тексты ошибок, логи, toString/JSON.
  */
 
-export const TOKEN_MASK = '***';
+import { TOKEN_MASK } from './constants';
+
+export { TOKEN_MASK };
 
 /** Замаскированное представление токена (без символов и длины исходного). */
 export function maskToken(token: string): string {

@@ -1,6 +1,7 @@
 import { GreenApiErrorCode, isGreenApiError, isQuotaError } from './errors';
 import type { QuotaSummary } from './quota';
 import type { StateInstanceResult } from './clientTypes';
+import type { ApiUrlErrorCode } from './url';
 
 type StateInstance = StateInstanceResult['stateInstance'];
 
@@ -17,6 +18,18 @@ export const LOGIN_FORM_TEXTS = {
   idInstanceDigits: 'ID инстанса — только цифры',
   apiUrlFormat: 'Введите адрес вида https://3100.api.green-api.com',
 } as const;
+
+/** Код ошибки поля apiUrl → текст (п. 1.2, ВА-2): у всех кодов один текст ТЗ. */
+const API_URL_ERROR_TEXTS: Record<ApiUrlErrorCode, string> = {
+  API_URL_MALFORMED: LOGIN_FORM_TEXTS.apiUrlFormat,
+  API_URL_NOT_HTTPS: LOGIN_FORM_TEXTS.apiUrlFormat,
+  API_URL_EXTRA_PARTS: LOGIN_FORM_TEXTS.apiUrlFormat,
+};
+
+/** Текст под полем «Адрес API» по коду из `validateApiUrl` (п. 1.2). */
+export function apiUrlErrorText(code: ApiUrlErrorCode): string {
+  return API_URL_ERROR_TEXTS[code];
+}
 
 /** Ошибки входа (§4.1 п. 1.5) и сессии (§5.4: 401 / 403). */
 export const AUTH_TEXTS = {

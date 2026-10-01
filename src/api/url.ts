@@ -1,36 +1,49 @@
-import { DEFAULT_API_URL } from './constants';
-import { TOKEN_MASK } from './mask';
-import { LOGIN_FORM_TEXTS } from './messages';
+// Только константы (и типы контракта): url.ts не зависит от messages/mask/errors — без циклов.
+import { DEFAULT_API_URL, TOKEN_MASK } from './constants';
 import type { ApiMethodName, Credentials } from './types';
 
 /** Методы GREEN-API, которые вызывает клиент (§5.2). */
 export type GreenApiMethod = ApiMethodName;
 
-/** Обрезает пробелы и хвостовые `/` у apiUrl (Р-1). */
+/** Обрезает пробелы и хвостовые `/` у apiUrl (Р-1). Единственная реализация в проекте. */
 export function normalizeApiUrl(apiUrl: string): string {
   return apiUrl.trim().replace(/\/+$/, '');
 }
 
-export type ApiUrlValidation = { ok: true; apiUrl: string } | { ok: false; error: string };
+/** Почему поле «Адрес API» не прошло проверку. Текст для UI — `apiUrlErrorText(code)` в messages.ts. */
+export const ApiUrlErrorCode = {
+  /** Не разбирается как URL или нет хоста. */
+  MALFORMED: 'API_URL_MALFORMED',
+  /** Протокол не `https:` (в том числе `http://`: токен идёт в URL, ВА-2). */
+  NOT_HTTPS: 'API_URL_NOT_HTTPS',
+  /** Есть query, hash или user:password. */
+  EXTRA_PARTS: 'API_URL_EXTRA_PARTS',
+} as const;
+
+export type ApiUrlErrorCode = (typeof ApiUrlErrorCode)[keyof typeof ApiUrlErrorCode];
+
+export type ApiUrlValidation = { ok: true; apiUrl: string } | { ok: false; code: ApiUrlErrorCode };
 
 /**
  * Проверка поля «Адрес API» формы входа (§4.1 п. 1.2, ВА-2). Чистая функция.
  * Пусто → `DEFAULT_API_URL`; пробелы по краям и хвостовые `/` убираются; адрес должен
  * разбираться как URL с протоколом `https:` (`http://` — ошибка: токен идёт в URL),
- * без query/hash. Ошибка — текст «Введите адрес вида https://3100.api.green-api.com».
+ * без query/hash. Ошибка — код `ApiUrlErrorCode`; текст «Введите адрес вида
+ * https://3100.api.green-api.com» даёт `apiUrlErrorText(code)` (messages.ts).
  */
 export function validateApiUrl(raw: string | null | undefined): ApiUrlValidation {
   const trimmed = normalizeApiUrl(raw ?? '');
   if (!trimmed) return { ok: true, apiUrl: DEFAULT_API_URL };
-  const fail = { ok: false, error: LOGIN_FORM_TEXTS.apiUrlFormat } as const;
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
   } catch {
-    return fail;
+    return { ok: false, code: ApiUrlErrorCode.MALFORMED };
   }
-  if (parsed.protocol !== 'https:' || !parsed.hostname) return fail;
-  if (parsed.search || parsed.hash || parsed.username || parsed.password) return fail;
+  if (parsed.protocol !== 'https:') return { ok: false, code: ApiUrlErrorCode.NOT_HTTPS };
+  if (!parsed.hostname) return { ok: false, code: ApiUrlErrorCode.MALFORMED };
+  if (parsed.search || parsed.hash || parsed.username || parsed.password)
+    return { ok: false, code: ApiUrlErrorCode.EXTRA_PARTS };
   return { ok: true, apiUrl: trimmed };
 }
 

@@ -5,17 +5,14 @@
  * они вводятся в форме входа (ТЗ ОР-1), а всё `VITE_*` попадает в бандл (НФТ-3, Д-1).
  */
 import { DEFAULT_API_URL } from './api/constants';
+// Напрямую из url.ts, не через barrel './api': конфиг не тянет клиент и тексты.
+import { normalizeApiUrl } from './api/url';
 
 export interface AppConfig {
   /** Предзаполнение поля apiUrl на форме входа (Р-1). */
   defaultApiUrl: string;
   /** Д-7: загрузка истории чата через getChatHistory. По умолчанию выключено (Р-4). */
   featureHistory: boolean;
-}
-
-/** Обрезает пробелы и хвостовые `/` у адреса API (Р-1). */
-export function normalizeApiUrl(raw: string): string {
-  return raw.trim().replace(/\/+$/, '');
 }
 
 type EnvSource = Partial<Record<'VITE_DEFAULT_API_URL' | 'VITE_FEATURE_HISTORY', string>>;

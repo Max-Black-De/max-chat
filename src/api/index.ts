@@ -41,6 +41,7 @@ export {
   normalizeApiUrl,
   validateApiUrl,
   validateCredentials,
+  ApiUrlErrorCode,
 } from './url';
 export type { GreenApiMethod, BuildUrlParams, ApiUrlValidation } from './url';
 export { parseRetryAfter, retryHintFor } from './http';
@@ -63,6 +64,7 @@ export {
   SERVER_REASON_MAX,
   WEBHOOK_URL_SET_TEXT,
   unreachableText,
+  apiUrlErrorText,
   shouldShowQuotaBanner,
   quotaText,
   stateInstanceText,

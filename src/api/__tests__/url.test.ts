@@ -5,7 +5,10 @@ import {
   normalizeApiUrl,
   validateApiUrl,
   validateCredentials,
+  ApiUrlErrorCode,
 } from '../url';
+import { apiUrlErrorText } from '../messages';
+import { readConfig } from '../../config';
 import { DEFAULT_API_URL } from '../constants';
 import { GreenApiError, GreenApiErrorCode } from '../errors';
 import { createGreenApiClient } from '../client';
@@ -85,19 +88,30 @@ describe('построение URL (§5.1)', () => {
       apiUrl: 'https://3100.api.green-api.com',
     });
     expect(validateApiUrl('HTTPS://3100.api.green-api.com')).toMatchObject({ ok: true });
-    for (const bad of [
-      'http://3100.api.green-api.com',
-      'HTTP://3100.api.green-api.com',
-      'ftp://3100.api.green-api.com',
-      '3100.api.green-api.com',
-      'not a url',
-      'https://3100.api.green-api.com/?a=1',
-      'https://3100.api.green-api.com/#x',
-      'https://user:pass@3100.api.green-api.com',
-      'javascript:alert(1)',
-    ]) {
-      expect(validateApiUrl(bad)).toEqual({ ok: false, error: ERR });
+    const cases: [string, ApiUrlErrorCode][] = [
+      ['http://3100.api.green-api.com', ApiUrlErrorCode.NOT_HTTPS],
+      ['HTTP://3100.api.green-api.com', ApiUrlErrorCode.NOT_HTTPS],
+      ['ftp://3100.api.green-api.com', ApiUrlErrorCode.NOT_HTTPS],
+      ['javascript:alert(1)', ApiUrlErrorCode.NOT_HTTPS],
+      ['3100.api.green-api.com', ApiUrlErrorCode.MALFORMED],
+      ['not a url', ApiUrlErrorCode.MALFORMED],
+      ['https://3100.api.green-api.com/?a=1', ApiUrlErrorCode.EXTRA_PARTS],
+      ['https://3100.api.green-api.com/#x', ApiUrlErrorCode.EXTRA_PARTS],
+      ['https://user:pass@3100.api.green-api.com', ApiUrlErrorCode.EXTRA_PARTS],
+    ];
+    for (const [bad, code] of cases) {
+      const v = validateApiUrl(bad);
+      expect(v, bad).toEqual({ ok: false, code });
+      // Текст — через messages.ts, у всех кодов один текст п. 1.2.
+      if (!v.ok) expect(apiUrlErrorText(v.code)).toBe(ERR);
     }
+  });
+
+  it('normalizeApiUrl — единственная реализация: config.ts использует её же', () => {
+    expect(readConfig({ VITE_DEFAULT_API_URL: ' https://1101.api.green-api.com/// ' })).toEqual({
+      defaultApiUrl: normalizeApiUrl(' https://1101.api.green-api.com/// '),
+      featureHistory: false,
+    });
   });
 
   it('клиент с http:// не создаётся (токен идёт в URL)', () => {

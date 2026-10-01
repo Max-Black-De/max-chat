@@ -59,6 +59,10 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
   поздние ответы отбрасываются (`SESSION_CLOSED`), новые вызовы падают без запроса. Новые учётные данные —
   новый клиент.
 - `validateApiUrl(raw)` — поле «Адрес API»: пусто → `https://api.green-api.com`, только `https:` (ВА-2).
+  Результат `{ ok: true, apiUrl } | { ok: false, code: ApiUrlErrorCode }` (`API_URL_MALFORMED`,
+  `API_URL_NOT_HTTPS`, `API_URL_EXTRA_PARTS`); текст под полем — `apiUrlErrorText(code)` из `messages.ts`.
+  `url.ts` зависит только от `constants.ts` (и типов контракта); `normalizeApiUrl` — единственная реализация,
+  `src/config.ts` импортирует её напрямую из `./api/url`.
 
 ## Ошибки
 

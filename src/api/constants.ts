@@ -29,3 +29,6 @@ export const RETRY_AFTER_MAX_MS = 30_000;
 
 /** deleteNotification при сети / таймауте / 429 / 499 / 5xx: до 3 повторов 1 → 2 → 4 с (§5.4, ВА-17). */
 export const DELETE_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
+
+/** Замена токена в URL и текстах (НФТ-3). Здесь, а не в mask.ts, чтобы url.ts зависел только от констант. */
+export const TOKEN_MASK = '***';
