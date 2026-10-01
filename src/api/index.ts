@@ -18,9 +18,13 @@ export type { GreenApiClient, SendMessageParams } from './client';
 export {
   GreenApiError,
   GreenApiQuotaError,
+  GreenApiSessionError,
   GreenApiErrorCode,
+  createGreenApiError,
   isGreenApiError,
   isQuotaError,
+  isSessionInvalidCode,
+  isSessionInvalidError,
 } from './errors';
 export type { RetryHint, GreenApiErrorInit } from './errors';
 export { parseQuota466Body, parseQuotaExceededNotification } from './quota';

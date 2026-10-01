@@ -56,7 +56,10 @@ export interface GreenApiClient {
     phoneNumber: string | number,
     options?: RequestOptions,
   ): Promise<Required<CheckAccountResponse>>;
-  /** POST sendMessage `{chatId, message}`. Без автоповтора; `@c.us` запрещён. */
+  /**
+   * POST sendMessage `{chatId, message}`; `@c.us` запрещён. 429 — до 3 автоповторов
+   * (Retry-After ≤ 30 с или 1 → 2 → 4 с); прочие ошибки — без автоповтора (ВА-8).
+   */
   sendMessage(params: SendMessageParams, options?: RequestOptions): Promise<SendMessageResponse>;
   /** GET receiveNotification?receiveTimeout=N → уведомление или `null` («пустой ответ», §5.2). */
   receiveNotification(options?: ReceiveOptions): Promise<RawReceivedNotification | null>;
@@ -65,6 +68,14 @@ export interface GreenApiClient {
     receiptId: number,
     options?: RequestOptions,
   ): Promise<DeleteNotificationResult>;
+  /**
+   * Закрыть сессию (выход / смена учётных данных, EC-S7): прервать все запросы и паузы повторов,
+   * отбрасывать поздние ответы (`SESSION_CLOSED`), новые вызовы — сразу `SESSION_CLOSED`.
+   * Идемпотентно. Для новых учётных данных создаётся новый клиент.
+   */
+  close(): void;
+  /** `true` после `close()`. */
+  isClosed(): boolean;
   toString(): string;
   toJSON(): { apiUrl: string; idInstance: string; apiTokenInstance: string };
 }
@@ -140,12 +151,14 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
         }, ms);
         signal?.addEventListener('abort', onAbort, { once: true });
       }));
+  const sessionCtrl = new AbortController();
   const ctx: TransportContext = {
     fetch: fetchImpl,
     apiUrl,
     secret: config.apiTokenInstance,
     logger: config.logger,
     timers,
+    session: sessionCtrl.signal,
   };
 
   async function call(
@@ -193,20 +206,41 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
           attempt: i + 1,
           delayMs: ms,
         });
+        // Пауза прерывается и внешним signal, и close() клиента.
+        const pause = new AbortController();
+        const stop = () => {
+          pause.abort();
+        };
+        if (signal?.aborted || sessionCtrl.signal.aborted) stop();
+        signal?.addEventListener('abort', stop, { once: true });
+        sessionCtrl.signal.addEventListener('abort', stop, { once: true });
         try {
-          await sleep(ms, signal);
+          await sleep(ms, pause.signal);
         } catch {
+          const closed = sessionCtrl.signal.aborted;
           const aborted = new GreenApiError({
-            code: GreenApiErrorCode.ABORTED,
+            code: closed ? GreenApiErrorCode.SESSION_CLOSED : GreenApiErrorCode.ABORTED,
             method: e.method,
             retry: 'none',
-            reason: 'aborted during retry pause',
+            reason: closed ? 'client closed during retry pause' : 'aborted during retry pause',
             apiUrl,
             attempts: i + 1,
             ...(e.maskedUrl !== undefined ? { maskedUrl: e.maskedUrl } : {}),
           });
           throw aborted;
+        } finally {
+          signal?.removeEventListener('abort', stop);
+          sessionCtrl.signal.removeEventListener('abort', stop);
         }
+        if (sessionCtrl.signal.aborted)
+          throw new GreenApiError({
+            code: GreenApiErrorCode.SESSION_CLOSED,
+            method: e.method,
+            retry: 'none',
+            reason: 'client closed during retry pause',
+            apiUrl,
+            attempts: i + 1,
+          });
       }
     }
   }
@@ -264,6 +298,8 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
     if (!parsed.ok)
       throw responseError(ctx, req, GreenApiErrorCode.INVALID_JSON, res.status, 'body is not JSON');
     const v = parsed.value;
+    const sf = statusFalseError(ctx, req, res.status, v);
+    if (sf) throw sf;
     if (!isRecord(v) || typeof v.result !== 'boolean') {
       throw responseError(
         ctx,
@@ -421,6 +457,9 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
         );
       }
       const v = parsed.value;
+      // `{status:false, reason}` — ошибка при любом HTTP-коде (ВА-11).
+      const sf = statusFalseError(ctx, req, res.status, v);
+      if (sf) throw sf;
       if (!isRecord(v) || v.receiptId === undefined || v.receiptId === null) return null;
       const rid = v.receiptId;
       const receiptId =
@@ -455,6 +494,13 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
         DELETE_RETRY_DELAYS_MS,
         options?.signal,
       );
+    },
+
+    close() {
+      sessionCtrl.abort();
+    },
+    isClosed() {
+      return sessionCtrl.signal.aborted;
     },
 
     toString() {

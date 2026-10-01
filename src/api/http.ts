@@ -1,4 +1,10 @@
-import { GreenApiError, GreenApiErrorCode, GreenApiQuotaError, type RetryHint } from './errors';
+import {
+  GreenApiErrorCode,
+  GreenApiQuotaError,
+  createGreenApiError,
+  type GreenApiError,
+  type RetryHint,
+} from './errors';
 import { redactSecret, truncate } from './mask';
 import { parseQuota466Body } from './quota';
 import type { GreenApiLogger, GreenApiTimers } from './clientTypes';
@@ -13,6 +19,8 @@ export interface TransportContext {
   secret: string;
   logger: GreenApiLogger | undefined;
   timers: GreenApiTimers;
+  /** Сигнал сессии клиента: `close()` прерывает запросы, поздние ответы отбрасываются (EC-S7). */
+  session: AbortSignal;
 }
 
 export interface TransportRequest {
@@ -80,7 +88,7 @@ function errorFor(
   code: GreenApiErrorCode,
   extra: { httpStatus?: number; reason?: string; receiptId?: number; retryAfterMs?: number } = {},
 ): GreenApiError {
-  return new GreenApiError({
+  return createGreenApiError({
     code,
     method: req.method,
     retry: retryHintFor(code, req.method),
@@ -95,6 +103,12 @@ export async function send(
   req: TransportRequest,
 ): Promise<TransportResponse> {
   const outer = req.signal;
+  const session = ctx.session;
+  // Функция, а не поле: значение меняется между await (TS сузил бы `session.aborted` до false).
+  const isClosed = (): boolean => session.aborted;
+  const closedError = () =>
+    errorFor(ctx, req, GreenApiErrorCode.SESSION_CLOSED, { reason: 'client closed' });
+  if (isClosed()) throw closedError();
   if (outer?.aborted)
     throw errorFor(ctx, req, GreenApiErrorCode.ABORTED, { reason: 'aborted before start' });
 
@@ -108,6 +122,7 @@ export async function send(
     controller.abort();
   };
   outer?.addEventListener('abort', onOuterAbort, { once: true });
+  session.addEventListener('abort', onOuterAbort, { once: true });
 
   const started = Date.now();
   const init: RequestInit = { method: req.http, credentials: 'omit', signal: controller.signal };
@@ -117,6 +132,7 @@ export async function send(
   }
 
   const failure = (phase: string): GreenApiError => {
+    if (isClosed()) return closedError();
     if (outer?.aborted && !timedOut)
       return errorFor(ctx, req, GreenApiErrorCode.ABORTED, { reason: 'aborted by caller' });
     // Исходную ошибку fetch не прикладываем (cause): в некоторых средах её текст содержит URL с токеном.
@@ -144,6 +160,8 @@ export async function send(
     } catch {
       throw failure('body');
     }
+    // Ответ пришёл после close() (fetch не уважил abort или успел раньше) — отбрасываем (EC-S7).
+    if (isClosed()) throw closedError();
     ctx.logger?.debug?.('GREEN-API response', {
       method: req.method,
       http: req.http,
@@ -155,6 +173,7 @@ export async function send(
   } finally {
     ctx.timers.clearTimeout(timer);
     outer?.removeEventListener('abort', onOuterAbort);
+    session.removeEventListener('abort', onOuterAbort);
   }
 }
 

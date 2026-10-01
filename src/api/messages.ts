@@ -213,7 +213,7 @@ export function describeError(error: unknown, context: ErrorContext): string {
     return quotaText(error.quota, context === 'checkAccount' ? 'checkAccount' : 'send');
   const C = GreenApiErrorCode;
   const code = error.code;
-  if (code === C.ABORTED) return FALLBACK_TEXTS.aborted;
+  if (code === C.ABORTED || code === C.SESSION_CLOSED) return FALLBACK_TEXTS.aborted;
   if (code === C.CHAT_ID_NOT_ALLOWED) return FALLBACK_TEXTS.chatIdNotAllowed;
 
   switch (context) {

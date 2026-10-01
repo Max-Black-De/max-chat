@@ -13,6 +13,11 @@ export const GreenApiErrorCode = {
   TIMEOUT: 'TIMEOUT',
   /** Запрос отменён внешним AbortSignal (выход, размонтирование). */
   ABORTED: 'ABORTED',
+  /**
+   * Клиент закрыт (`close()`: выход / смена учётных данных). Запрос старой сессии прерван, а
+   * поздний ответ отброшен — его нельзя обрабатывать и удалять (EC-S7, EC-P16).
+   */
+  SESSION_CLOSED: 'SESSION_CLOSED',
   /** Тело ответа 2xx — не JSON. */
   INVALID_JSON: 'INVALID_JSON',
   /** JSON корректный, но структура не та, что ожидается для метода. */
@@ -127,6 +132,49 @@ export class GreenApiError extends Error {
   }
 }
 
+/**
+ * «Сессия невалидна» (§5.4, ВА-3, ВА-4, ВА-19; EC-E2, EC-P13): 401, 403 (кроме
+ * `Your account is suspended` на sendMessage), 400 `Instance account is expired…` /
+ * `Instance is deleted`. Один класс для всех — вызывающий код (F2/F5) по `isSessionInvalidError`
+ * останавливает опрос, очищает sessionStorage и выходит на экран входа; `code` остаётся
+ * конкретным (UNAUTHORIZED / FORBIDDEN / ACCOUNT_SUSPENDED / INSTANCE_EXPIRED / INSTANCE_DELETED),
+ * чтобы показать нужный текст. Автоповтора нет.
+ */
+export class GreenApiSessionError extends GreenApiError {
+  override readonly name: string = 'GreenApiSessionError';
+  readonly sessionInvalid = true as const;
+
+  override toJSON(): Record<string, unknown> {
+    return { ...super.toJSON(), sessionInvalid: true };
+  }
+}
+
+/** Делает ли код с данным методом сессию невалидной (EC-P13). */
+export function isSessionInvalidCode(
+  code: GreenApiErrorCode,
+  method: GreenApiMethod | 'client',
+): boolean {
+  switch (code) {
+    case GreenApiErrorCode.UNAUTHORIZED:
+    case GreenApiErrorCode.FORBIDDEN:
+    case GreenApiErrorCode.INSTANCE_EXPIRED:
+    case GreenApiErrorCode.INSTANCE_DELETED:
+      return true;
+    case GreenApiErrorCode.ACCOUNT_SUSPENDED:
+      // 403 suspended на sendMessage — свой текст (п. 3.6), сессия жива; на прочих методах — как 403.
+      return method !== 'sendMessage';
+    default:
+      return false;
+  }
+}
+
+/** Создаёт `GreenApiSessionError` для кодов «сессия невалидна», иначе `GreenApiError`. */
+export function createGreenApiError(init: GreenApiErrorInit): GreenApiError {
+  return isSessionInvalidCode(init.code, init.method)
+    ? new GreenApiSessionError({ ...init, retry: 'none' })
+    : new GreenApiError(init);
+}
+
 /** 466: квота тарифа Developer (§5.5). Автоповтора нет никогда. */
 export class GreenApiQuotaError extends GreenApiError {
   override readonly name: string = 'GreenApiQuotaError';
@@ -150,4 +198,8 @@ export function isGreenApiError(e: unknown): e is GreenApiError {
 
 export function isQuotaError(e: unknown): e is GreenApiQuotaError {
   return e instanceof GreenApiQuotaError;
+}
+
+export function isSessionInvalidError(e: unknown): e is GreenApiSessionError {
+  return e instanceof GreenApiSessionError;
 }
