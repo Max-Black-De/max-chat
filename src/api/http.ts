@@ -213,13 +213,17 @@ function extractReason(text: string, secret: string): string | undefined {
   return reason ? truncate(redactSecret(reason, secret)) : undefined;
 }
 
-/** Классификация 400 / `{status:false, reason}` по тексту причины (§5.4, §4.2 п. 2.8). */
+/**
+ * Классификация 400 / `{status:false, reason}` по тексту причины (§5.4, §4.2 п. 2.8).
+ * Порядок важен: expired / deleted проверяются раньше широкого «not authorized», чтобы
+ * «Instance account is expired… not authorized» не стал паузой вместо выхода (ВА-3).
+ */
 export function classifyReason(reason: string): GreenApiErrorCode {
   if (/custom webhook url is set/i.test(reason)) return GreenApiErrorCode.WEBHOOK_URL_SET;
-  if (/instance (is starting|in starting process)|not authorized/i.test(reason))
-    return GreenApiErrorCode.INSTANCE_NOT_READY;
   if (/account is expired/i.test(reason)) return GreenApiErrorCode.INSTANCE_EXPIRED;
   if (/instance is deleted/i.test(reason)) return GreenApiErrorCode.INSTANCE_DELETED;
+  if (/instance (is starting|in starting process)|not authorized/i.test(reason))
+    return GreenApiErrorCode.INSTANCE_NOT_READY;
   if (/get contact info limit reached/i.test(reason)) return GreenApiErrorCode.CHECK_LIMIT;
   if (/check phone number timeout limit exceeded/i.test(reason))
     return GreenApiErrorCode.CHECK_TIMEOUT;
@@ -252,32 +256,52 @@ export function httpError(
     httpStatus: status,
   };
   if (reason !== undefined) extra.reason = reason;
-  // `{status:false, reason}` разбирается при любом HTTP-коде (ВА-11): известная причина важнее кода.
-  const parsed = parseJson(res.text);
-  const statusFalseCode =
-    parsed.ok && isRecord(parsed.value) && parsed.value.status === false && reason !== undefined
-      ? classifyReason(reason)
-      : GreenApiErrorCode.BAD_REQUEST;
   let code: GreenApiErrorCode;
-  if (statusFalseCode !== GreenApiErrorCode.BAD_REQUEST) code = statusFalseCode;
-  else if (status === 401) code = GreenApiErrorCode.UNAUTHORIZED;
-  else if (status === 403)
+  if (status === 401) {
+    // §5.4 (ВА-4): 401 — всегда «сессия невалидна», тело (`{status:false, reason:"not authorized"}`)
+    // код не перекрывает.
+    code = GreenApiErrorCode.UNAUTHORIZED;
+  } else if (status === 403) {
+    // §5.4 (ВА-19): 403 — «сессия невалидна»; исключение — `Your account is suspended` (на
+    // sendMessage сессия жива, п. 3.6; на прочих методах ACCOUNT_SUSPENDED тоже невалидна).
     code =
       reason && /suspended/i.test(reason)
         ? GreenApiErrorCode.ACCOUNT_SUSPENDED
         : GreenApiErrorCode.FORBIDDEN;
-  else if (status === 400) code = classifyReason(reason ?? '');
-  else if (status === 404) code = GreenApiErrorCode.NOT_FOUND;
-  else if (status === 429) {
-    code = GreenApiErrorCode.RATE_LIMITED;
-    const ms = parseRetryAfter(res.retryAfter);
-    if (ms !== undefined) extra.retryAfterMs = ms;
-  } else if (status === 469) code = GreenApiErrorCode.CHECK_LIMIT;
-  else if (status === 499 || status >= 500) code = GreenApiErrorCode.SERVER;
-  else code = GreenApiErrorCode.HTTP;
+  } else if (status === 400) {
+    code = classifyReason(reason ?? '');
+  } else {
+    code = codeForOtherStatus(res, reason, extra);
+  }
   const err = errorFor(ctx, req, code, extra);
   ctx.logger?.warn?.('GREEN-API error', err.toJSON());
   return err;
+}
+
+/**
+ * Прочие коды (не 400/401/403/466). `{status:false, reason}` с известной причиной разбирается
+ * и здесь (ВА-11: «тело разбирать при любом коде»), иначе — по HTTP-коду.
+ */
+function codeForOtherStatus(
+  res: TransportResponse,
+  reason: string | undefined,
+  extra: { retryAfterMs?: number },
+): GreenApiErrorCode {
+  const { status } = res;
+  const parsed = parseJson(res.text);
+  if (parsed.ok && isRecord(parsed.value) && parsed.value.status === false && reason) {
+    const byReason = classifyReason(reason);
+    if (byReason !== GreenApiErrorCode.BAD_REQUEST) return byReason;
+  }
+  if (status === 404) return GreenApiErrorCode.NOT_FOUND;
+  if (status === 429) {
+    const ms = parseRetryAfter(res.retryAfter);
+    if (ms !== undefined) extra.retryAfterMs = ms;
+    return GreenApiErrorCode.RATE_LIMITED;
+  }
+  if (status === 469) return GreenApiErrorCode.CHECK_LIMIT;
+  if (status === 499 || status >= 500) return GreenApiErrorCode.SERVER;
+  return GreenApiErrorCode.HTTP;
 }
 
 /** Ошибка формата/структуры 2xx-ответа. */

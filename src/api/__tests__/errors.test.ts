@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GreenApiError, GreenApiErrorCode as C, type GreenApiErrorCode } from '../errors';
+import {
+  GreenApiError,
+  GreenApiErrorCode as C,
+  isSessionInvalidError,
+  type GreenApiErrorCode,
+} from '../errors';
+import { classifyReason } from '../http';
 import type { GreenApiClient } from '../client';
 import {
   catchError,
@@ -115,6 +121,91 @@ describe('{status:false, reason} при любом HTTP-коде (ВА-11)', () 
       METHODS.checkAccount,
     );
     expect(e2.code).toBe(C.CHECK_TIMEOUT);
+  });
+});
+
+describe('HTTP-код × reason: 401/403 важнее тела (§5.4, ВА-4, ВА-11, ВА-19)', () => {
+  const NOT_AUTH = 'not authorized';
+  const NOT_READY = 'instance is starting or not authorized';
+  const EXPIRED = 'Instance account is expired, instance is not authorized';
+  const DELETED = 'Instance is deleted. Not authorized';
+  const SUSPENDED = 'Your account is suspended';
+  const WEBHOOK = 'Message cannot be received because custom webhook url is set';
+  type Row = [number, string | null, GreenApiErrorCode, boolean];
+  // [HTTP, reason в {status:false, reason} (null — пустое тело), код, сессия невалидна]
+  const rows: Row[] = [
+    [401, null, C.UNAUTHORIZED, true],
+    [401, NOT_AUTH, C.UNAUTHORIZED, true],
+    [401, NOT_READY, C.UNAUTHORIZED, true],
+    [401, EXPIRED, C.UNAUTHORIZED, true],
+    [401, WEBHOOK, C.UNAUTHORIZED, true],
+    [403, null, C.FORBIDDEN, true],
+    [403, NOT_AUTH, C.FORBIDDEN, true],
+    [403, NOT_READY, C.FORBIDDEN, true],
+    [403, DELETED, C.FORBIDDEN, true],
+    [403, SUSPENDED, C.ACCOUNT_SUSPENDED, true], // не sendMessage — как 403 (ВА-19)
+    [400, NOT_AUTH, C.INSTANCE_NOT_READY, false],
+    [400, NOT_READY, C.INSTANCE_NOT_READY, false],
+    [400, EXPIRED, C.INSTANCE_EXPIRED, true],
+    [400, DELETED, C.INSTANCE_DELETED, true],
+    [400, WEBHOOK, C.WEBHOOK_URL_SET, false],
+    [200, NOT_AUTH, C.INSTANCE_NOT_READY, false],
+    [200, NOT_READY, C.INSTANCE_NOT_READY, false],
+    [200, EXPIRED, C.INSTANCE_EXPIRED, true],
+    [200, DELETED, C.INSTANCE_DELETED, true],
+    [200, WEBHOOK, C.WEBHOOK_URL_SET, false],
+    // ВА-11: известная причина в {status:false} разбирается и на прочих кодах.
+    [500, NOT_READY, C.INSTANCE_NOT_READY, false],
+    [500, EXPIRED, C.INSTANCE_EXPIRED, true],
+    [500, null, C.SERVER, false],
+  ];
+  it.each(rows)(
+    'HTTP %i, reason %j → %s (сессия невалидна: %s)',
+    async (status, reason, code, invalid) => {
+      const body = reason === null ? '' : { status: false, reason };
+      for (const name of ['getStateInstance', 'receiveNotification', 'checkAccount']) {
+        const e = await errorOf({ status, body }, method(name));
+        expect(e.code, name).toBe(code);
+        expect(isSessionInvalidError(e), name).toBe(invalid);
+        if (invalid) expect(e.retry, name).toBe('none');
+      }
+    },
+  );
+
+  it('401 {status:false, reason:"not authorized"} в опросе — выход, а не пауза', async () => {
+    const e = await errorOf(
+      { status: 401, body: { status: false, reason: NOT_AUTH } },
+      method('receiveNotification'),
+    );
+    expect(e.code).toBe(C.UNAUTHORIZED);
+    expect(e.retry).toBe('none');
+    expect(isSessionInvalidError(e)).toBe(true);
+  });
+
+  it('403 suspended на sendMessage — свой код, сессия жива (п. 3.6, §5.4)', async () => {
+    for (const body of [SUSPENDED, { status: false, reason: SUSPENDED }]) {
+      const e = await errorOf({ status: 403, body }, method('sendMessage'));
+      expect(e.code).toBe(C.ACCOUNT_SUSPENDED);
+      expect(isSessionInvalidError(e)).toBe(false);
+    }
+  });
+
+  it('403 не-suspended на sendMessage — сессия невалидна', async () => {
+    const e = await errorOf(
+      { status: 403, body: { status: false, reason: NOT_AUTH } },
+      method('sendMessage'),
+    );
+    expect(e.code).toBe(C.FORBIDDEN);
+    expect(isSessionInvalidError(e)).toBe(true);
+  });
+
+  it('classifyReason: expired / deleted раньше широкого «not authorized»', () => {
+    expect(classifyReason(EXPIRED)).toBe(C.INSTANCE_EXPIRED);
+    expect(classifyReason(DELETED)).toBe(C.INSTANCE_DELETED);
+    expect(classifyReason(NOT_AUTH)).toBe(C.INSTANCE_NOT_READY);
+    expect(classifyReason('instance in starting process try later')).toBe(C.INSTANCE_NOT_READY);
+    expect(classifyReason(`${WEBHOOK}. not authorized`)).toBe(C.WEBHOOK_URL_SET);
+    expect(classifyReason('Validation failed')).toBe(C.BAD_REQUEST);
   });
 });
 

@@ -66,7 +66,9 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 `receiptId?`, `retryAfterMs?`, `attempts`); для 466 — подкласс `GreenApiQuotaError` с `quota: QuotaSummary`;
 для «сессия невалидна» (401, 403 кроме suspended на send, 400 expired/deleted — EC-E2, EC-P13) — подкласс
 `GreenApiSessionError` (`isSessionInvalidError(e)`): F2/F5 по нему останавливают опрос и выходят на вход.
-`{status:false, reason}` разбирается при любом HTTP-коде (ВА-11).
+401 и 403 — всегда «сессия невалидна», тело `{status:false, reason}` код не перекрывает (ВА-4, ВА-19;
+исключение — 403 suspended на sendMessage, п. 3.6). На 200/400 и прочих кодах `{status:false, reason}` с
+известной причиной разбирается по `reason` (ВА-11); expired/deleted проверяются раньше «not authorized».
 `retry`: `backoff` (1→2→4…30 с), `pause` (30 с), `none`.
 
 | code                                       | Когда                                                             | retry           |
