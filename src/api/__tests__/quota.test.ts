@@ -168,7 +168,7 @@ describe('уведомление quotaExceeded (§5.5)', () => {
       status: 'CORRESPONDENTS_QUOTA_EXCEEDED',
     });
     expect(quotaText(q ?? { kind: 'chats', source: 'fallback' }, 'notification')).toBe(
-      QUOTA_TEXTS.notificationBanner,
+      QUOTA_TEXTS.banner,
     );
   });
 
