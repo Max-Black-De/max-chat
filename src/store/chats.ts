@@ -23,7 +23,7 @@ export interface ChatLastMessage {
 }
 
 export interface Chat {
-  /** Строка из checkAccount или кеша (`^-?\d+$`), никогда не `…@c.us` (EC-I4). */
+  /** Строка из checkAccount или кеша (`^-?\d+$`), без `@` и суффиксов (EC-I4). */
   chatId: ChatId;
   /** Нормализованный номер (Р-10), из которого создан чат. */
   phone: string;
