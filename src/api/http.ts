@@ -28,37 +28,57 @@ export interface TransportRequest {
 export interface TransportResponse {
   status: number;
   text: string;
+  /** Значение `Retry-After`, если браузер его отдал (CORS: заголовок должен быть в Expose-Headers). */
+  retryAfter: string | null;
 }
 
-/** Рекомендация повтора по коду и методу (§5.4). */
+/**
+ * Рекомендация повтора для вызывающего кода (§5.4, ВА-7, ВА-8, ВА-17):
+ * - sendMessage, checkAccount — никогда (`none`): 429 у sendMessage клиент уже повторил сам;
+ * - deleteNotification — встроенные повторы уже сделаны, дальше — следующий receive (`none`),
+ *   кроме «инстанс не готов» (`pause`);
+ * - остальные (receive, getStateInstance, getSettings): сеть / таймаут / 429 / 499 / 5xx / битый
+ *   ответ — `backoff`, «инстанс не готов» — `pause`.
+ */
 export function retryHintFor(
   code: GreenApiErrorCode,
   method: GreenApiMethod | 'client',
 ): RetryHint {
-  // sendMessage — никогда без участия пользователя (дубли, квота): §5.4, §4.3 п. 3.4.
-  if (method === 'sendMessage') return 'none';
+  if (method === 'sendMessage' || method === 'checkAccount' || method === 'client') return 'none';
+  if (code === GreenApiErrorCode.INSTANCE_NOT_READY) return 'pause';
+  if (method === 'deleteNotification') return 'none';
   switch (code) {
-    case GreenApiErrorCode.INSTANCE_NOT_READY:
-      return 'pause';
     case GreenApiErrorCode.RATE_LIMITED:
-      return 'backoff';
     case GreenApiErrorCode.NETWORK:
     case GreenApiErrorCode.TIMEOUT:
     case GreenApiErrorCode.SERVER:
     case GreenApiErrorCode.INVALID_JSON:
     case GreenApiErrorCode.UNEXPECTED_RESPONSE:
-      // checkAccount: запрос мог дойти и списать проверку из квоты 100/мес — не повторяем сами (Р-26 п. 3).
-      return method === 'checkAccount' ? 'none' : 'backoff';
+      return 'backoff';
     default:
       return 'none';
   }
+}
+
+/** Разбор `Retry-After`: секунды или HTTP-дата → мс; иначе undefined. */
+export function parseRetryAfter(
+  value: string | null,
+  now: number = Date.now(),
+): number | undefined {
+  if (value === null) return undefined;
+  const v = value.trim();
+  if (/^\d+$/.test(v)) return Number(v) * 1000;
+  // Отрицательные и дробные числа — невалидны (RFC 9110 §10.2.3), не принимать их за дату.
+  if (/^[+-]?[\d.]+$/.test(v)) return undefined;
+  const at = Date.parse(v);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now);
 }
 
 function errorFor(
   ctx: TransportContext,
   req: Pick<TransportRequest, 'method' | 'maskedUrl'>,
   code: GreenApiErrorCode,
-  extra: { httpStatus?: number; reason?: string; receiptId?: number } = {},
+  extra: { httpStatus?: number; reason?: string; receiptId?: number; retryAfterMs?: number } = {},
 ): GreenApiError {
   return new GreenApiError({
     code,
@@ -131,7 +151,7 @@ export async function send(
       status: res.status,
       durationMs: Date.now() - started,
     });
-    return { status: res.status, text };
+    return { status: res.status, text, retryAfter: res.headers.get('Retry-After') };
   } finally {
     ctx.timers.clearTimeout(timer);
     outer?.removeEventListener('abort', onOuterAbort);
@@ -179,10 +199,11 @@ export function classifyReason(reason: string): GreenApiErrorCode {
   if (/custom webhook url is set/i.test(reason)) return GreenApiErrorCode.WEBHOOK_URL_SET;
   if (/instance (is starting|in starting process)|not authorized/i.test(reason))
     return GreenApiErrorCode.INSTANCE_NOT_READY;
-  if (/account is expired|instance is deleted/i.test(reason))
-    return GreenApiErrorCode.INSTANCE_EXPIRED;
-  if (/get contact info limit reached|check phone number timeout limit exceeded/i.test(reason))
-    return GreenApiErrorCode.CHECK_LIMIT;
+  if (/account is expired/i.test(reason)) return GreenApiErrorCode.INSTANCE_EXPIRED;
+  if (/instance is deleted/i.test(reason)) return GreenApiErrorCode.INSTANCE_DELETED;
+  if (/get contact info limit reached/i.test(reason)) return GreenApiErrorCode.CHECK_LIMIT;
+  if (/check phone number timeout limit exceeded/i.test(reason))
+    return GreenApiErrorCode.CHECK_TIMEOUT;
   if (/account is suspended/i.test(reason)) return GreenApiErrorCode.ACCOUNT_SUSPENDED;
   return GreenApiErrorCode.BAD_REQUEST;
 }
@@ -208,9 +229,19 @@ export function httpError(
     );
   }
   const reason = extractReason(res.text, ctx.secret);
-  const extra = reason !== undefined ? { httpStatus: status, reason } : { httpStatus: status };
+  const extra: { httpStatus: number; reason?: string; retryAfterMs?: number } = {
+    httpStatus: status,
+  };
+  if (reason !== undefined) extra.reason = reason;
+  // `{status:false, reason}` разбирается при любом HTTP-коде (ВА-11): известная причина важнее кода.
+  const parsed = parseJson(res.text);
+  const statusFalseCode =
+    parsed.ok && isRecord(parsed.value) && parsed.value.status === false && reason !== undefined
+      ? classifyReason(reason)
+      : GreenApiErrorCode.BAD_REQUEST;
   let code: GreenApiErrorCode;
-  if (status === 401) code = GreenApiErrorCode.UNAUTHORIZED;
+  if (statusFalseCode !== GreenApiErrorCode.BAD_REQUEST) code = statusFalseCode;
+  else if (status === 401) code = GreenApiErrorCode.UNAUTHORIZED;
   else if (status === 403)
     code =
       reason && /suspended/i.test(reason)
@@ -218,8 +249,11 @@ export function httpError(
         : GreenApiErrorCode.FORBIDDEN;
   else if (status === 400) code = classifyReason(reason ?? '');
   else if (status === 404) code = GreenApiErrorCode.NOT_FOUND;
-  else if (status === 429) code = GreenApiErrorCode.RATE_LIMITED;
-  else if (status === 469) code = GreenApiErrorCode.CHECK_LIMIT;
+  else if (status === 429) {
+    code = GreenApiErrorCode.RATE_LIMITED;
+    const ms = parseRetryAfter(res.retryAfter);
+    if (ms !== undefined) extra.retryAfterMs = ms;
+  } else if (status === 469) code = GreenApiErrorCode.CHECK_LIMIT;
   else if (status === 499 || status >= 500) code = GreenApiErrorCode.SERVER;
   else code = GreenApiErrorCode.HTTP;
   const err = errorFor(ctx, req, code, extra);

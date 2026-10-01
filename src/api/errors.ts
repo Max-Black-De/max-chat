@@ -25,8 +25,10 @@ export const GreenApiErrorCode = {
   ACCOUNT_SUSPENDED: 'ACCOUNT_SUSPENDED',
   /** 400 / {status:false} `instance is starting or not authorized` / `instance in starting process`. */
   INSTANCE_NOT_READY: 'INSTANCE_NOT_READY',
-  /** 400 `Instance account is expired` / `Instance is deleted`. */
+  /** 400 `Instance account is expired…` (§4.1 п. 1.6, ВА-3). */
   INSTANCE_EXPIRED: 'INSTANCE_EXPIRED',
+  /** 400 `Instance is deleted` (§4.1 п. 1.6, ВА-3). */
+  INSTANCE_DELETED: 'INSTANCE_DELETED',
   /** 400 `…custom webhook url is set…` (receive/delete) — П-1. */
   WEBHOOK_URL_SET: 'WEBHOOK_URL_SET',
   /** Прочие 400 (`Validation failed…` и т. п.) — текст показывается пользователю. */
@@ -39,6 +41,8 @@ export const GreenApiErrorCode = {
   QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
   /** 469 или `User get contact info limit reached` — лимит проверок номеров. */
   CHECK_LIMIT: 'CHECK_LIMIT',
+  /** 400 `check phone number timeout limit exceeded` — MAX не ответил вовремя (ВА-10). */
+  CHECK_TIMEOUT: 'CHECK_TIMEOUT',
   /** 499 / 5xx. */
   SERVER: 'SERVER',
   /** Прочие неуспешные HTTP-коды. */
@@ -55,7 +59,8 @@ export type GreenApiErrorCode = (typeof GreenApiErrorCode)[keyof typeof GreenApi
  * Рекомендация вызывающему коду (§5.4, §5.5):
  * - `backoff` — повтор с экспоненциальной паузой 1→2→4…30 с;
  * - `pause` — пауза 30 с и повтор (инстанс стартует / не авторизован);
- * - `none` — без автоповтора (401/403, 466, sendMessage, валидация, отмена…).
+ * - `none` — без автоповтора: 401/403, 466, любая ошибка sendMessage и checkAccount,
+ *   deleteNotification после встроенных повторов, валидация, отмена.
  */
 export type RetryHint = 'backoff' | 'pause' | 'none';
 
@@ -72,6 +77,10 @@ export interface GreenApiErrorInit {
   apiUrl?: string;
   /** Для INVALID_JSON в receiveNotification: receiptId, если удалось извлечь, чтобы удалить уведомление (§5.4). */
   receiptId?: number;
+  /** Для 429: пауза из заголовка `Retry-After`, мс (если заголовок доступен браузеру и разобран). */
+  retryAfterMs?: number;
+  /** Сколько HTTP-попыток сделал клиент (с учётом встроенных повторов sendMessage/deleteNotification). */
+  attempts?: number;
 }
 
 export class GreenApiError extends Error {
@@ -84,6 +93,8 @@ export class GreenApiError extends Error {
   readonly maskedUrl: string | undefined;
   readonly apiUrl: string | undefined;
   readonly receiptId: number | undefined;
+  readonly retryAfterMs: number | undefined;
+  attempts: number;
 
   constructor(init: GreenApiErrorInit) {
     const status = init.httpStatus !== undefined ? ` HTTP ${init.httpStatus}` : '';
@@ -97,6 +108,8 @@ export class GreenApiError extends Error {
     this.maskedUrl = init.maskedUrl;
     this.apiUrl = init.apiUrl;
     this.receiptId = init.receiptId;
+    this.retryAfterMs = init.retryAfterMs;
+    this.attempts = init.attempts ?? 1;
   }
 
   /** Безопасное представление для логов (без токена). */
@@ -108,6 +121,7 @@ export class GreenApiError extends Error {
       httpStatus: this.httpStatus,
       retry: this.retry,
       reason: this.reason,
+      attempts: this.attempts,
       url: this.maskedUrl,
     };
   }

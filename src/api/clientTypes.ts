@@ -31,6 +31,11 @@ export interface GreenApiClientConfig extends Omit<Credentials, 'apiUrl'> {
   /** Таймаут HTTP-запроса по умолчанию, мс (`REQUEST_TIMEOUT_MS`, 30 с; Р-20). Переопределяется per-call. */
   timeoutMs?: number;
   timers?: GreenApiTimers;
+  /**
+   * Пауза между встроенными повторами (sendMessage 429, deleteNotification). Должна
+   * завершаться отказом при отмене `signal`. По умолчанию — на `timers`.
+   */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   logger?: GreenApiLogger;
   /**
    * Необязательный белый список chatId для sendMessage (защита на тарифе Developer, Р-26).

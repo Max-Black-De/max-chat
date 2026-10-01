@@ -24,6 +24,9 @@ import {
   RECEIVE_TIMEOUT_MARGIN_MS,
   RECEIVE_TIMEOUT_SEC,
   REQUEST_TIMEOUT_MS,
+  RETRY_AFTER_MAX_MS,
+  SEND_RATE_LIMIT_RETRY_DELAYS_MS,
+  DELETE_RETRY_DELAYS_MS,
 } from './constants';
 import { toCheckAccountPhone } from './phone';
 import type { CheckAccountResponse, SendMessageRequest, SendMessageResponse } from './types';
@@ -31,6 +34,7 @@ import {
   buildMaskedUrl,
   buildMethodUrl,
   normalizeApiUrl,
+  validateApiUrl,
   validateCredentials,
   type BuildUrlParams,
   type GreenApiMethod,
@@ -79,9 +83,9 @@ function invalidArgument(
   return new GreenApiError({ code, method, retry: 'none', reason });
 }
 
-/** Длина в символах Unicode (эмодзи = 1), как у счётчика «N/4000» в UI. */
+/** Длина текста для лимита 4000 — `text.length` (UTF-16, emoji = 2), п. 3.5 (ВА-14). */
 export function messageLength(text: string): number {
-  return Array.from(text).length;
+  return text.length;
 }
 
 /** Проверка chatId для sendMessage (§5.5): только цифры личного чата. Возвращает текст проблемы или null. */
@@ -103,7 +107,8 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
   const problem = validateCredentials(credsIn);
   if (problem) throw invalidArgument('client', problem);
 
-  const apiUrl = normalizeApiUrl(credsIn.apiUrl);
+  const checkedUrl = validateApiUrl(credsIn.apiUrl);
+  const apiUrl = checkedUrl.ok ? checkedUrl.apiUrl : normalizeApiUrl(credsIn.apiUrl);
   const idInstance = config.idInstance;
   const creds = { apiUrl, idInstance, apiTokenInstance: config.apiTokenInstance };
   const defaultTimeout = config.timeoutMs ?? REQUEST_TIMEOUT_MS;
@@ -117,6 +122,24 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
       globalThis.clearTimeout(id as ReturnType<typeof globalThis.setTimeout>);
     },
   };
+  const sleep =
+    config.sleep ??
+    ((ms: number, signal?: AbortSignal) =>
+      new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new Error('aborted'));
+          return;
+        }
+        const onAbort = () => {
+          timers.clearTimeout(id);
+          reject(new Error('aborted'));
+        };
+        const id = timers.setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve();
+        }, ms);
+        signal?.addEventListener('abort', onAbort, { once: true });
+      }));
   const ctx: TransportContext = {
     fetch: fetchImpl,
     apiUrl,
@@ -143,6 +166,49 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
       signal: options?.signal,
     });
     return { res, req: { method, maskedUrl } };
+  }
+
+  /**
+   * Встроенные повторы (sendMessage 429, deleteNotification). Пауза — через `sleep`,
+   * отмена `signal` во время паузы → ABORTED. `attempts` у итоговой ошибки — число попыток.
+   */
+  async function withRetries<T>(
+    attempt: () => Promise<T>,
+    isRetryable: (e: GreenApiError) => boolean,
+    delays: readonly number[],
+    signal: AbortSignal | undefined,
+    delayFor: (e: GreenApiError, i: number) => number = (_e, i) => delays[i] ?? 0,
+  ): Promise<T> {
+    for (let i = 0; ; i++) {
+      try {
+        return await attempt();
+      } catch (e) {
+        if (!(e instanceof GreenApiError)) throw e;
+        e.attempts = i + 1;
+        if (i >= delays.length || !isRetryable(e)) throw e;
+        const ms = delayFor(e, i);
+        config.logger?.debug?.('GREEN-API retry', {
+          method: e.method,
+          code: e.code,
+          attempt: i + 1,
+          delayMs: ms,
+        });
+        try {
+          await sleep(ms, signal);
+        } catch {
+          const aborted = new GreenApiError({
+            code: GreenApiErrorCode.ABORTED,
+            method: e.method,
+            retry: 'none',
+            reason: 'aborted during retry pause',
+            apiUrl,
+            attempts: i + 1,
+            ...(e.maskedUrl !== undefined ? { maskedUrl: e.maskedUrl } : {}),
+          });
+          throw aborted;
+        }
+      }
+    }
   }
 
   /** Общий путь: 2xx + непустой JSON-объект, иначе типизированная ошибка. */
@@ -176,6 +242,39 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
         'body is not an object',
       );
     return { value: parsed.value, req, status: res.status };
+  }
+
+  async function deleteOnce(
+    receiptId: number,
+    options: RequestOptions | undefined,
+  ): Promise<DeleteNotificationResult> {
+    const { res, req } = await call('deleteNotification', 'DELETE', options, {
+      url: { pathSuffix: [receiptId] },
+    });
+    // 500 «…findUnAckedMessage…» — уведомление не найдено: считать удалённым (§5.4).
+    if (res.status >= 500 && res.text.includes('findUnAckedMessage')) {
+      return {
+        result: false,
+        reason: 'notification not found (findUnAckedMessage)',
+        alreadyDeleted: true,
+      };
+    }
+    if (res.status < 200 || res.status >= 300) throw httpError(ctx, req, res);
+    const parsed = parseJson(res.text);
+    if (!parsed.ok)
+      throw responseError(ctx, req, GreenApiErrorCode.INVALID_JSON, res.status, 'body is not JSON');
+    const v = parsed.value;
+    if (!isRecord(v) || typeof v.result !== 'boolean') {
+      throw responseError(
+        ctx,
+        req,
+        GreenApiErrorCode.UNEXPECTED_RESPONSE,
+        res.status,
+        'missing result',
+      );
+    }
+    const reason = typeof v.reason === 'string' ? v.reason : '';
+    return { result: v.result, reason, alreadyDeleted: !v.result };
   }
 
   const client: GreenApiClient = {
@@ -258,9 +357,19 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
           'sendMessage',
           `message is longer than ${MAX_MESSAGE_LENGTH} characters`,
         );
-      const { value, req, status } = await callJson('sendMessage', 'POST', options, {
-        body: { chatId: params.chatId, message },
-      });
+      // 429 — запрос отклонён, дубля нет: до 3 автоповторов (Retry-After ≤ 30 с или 1 → 2 → 4 с), ВА-8.
+      // Прочие ошибки (сеть, таймаут, 499, 5xx, 466…) — сразу наверх, без автоповтора.
+      const { value, req, status } = await withRetries(
+        () =>
+          callJson('sendMessage', 'POST', options, { body: { chatId: params.chatId, message } }),
+        (e) => e.code === GreenApiErrorCode.RATE_LIMITED,
+        SEND_RATE_LIMIT_RETRY_DELAYS_MS,
+        options?.signal,
+        (e, i) =>
+          e.retryAfterMs !== undefined && e.retryAfterMs <= RETRY_AFTER_MAX_MS
+            ? e.retryAfterMs
+            : (SEND_RATE_LIMIT_RETRY_DELAYS_MS[i] ?? 0),
+      );
       const id = value.idMessage;
       // idMessage — строка; число принимаем только если оно точно представимо (§5.1).
       const idMessage =
@@ -301,12 +410,13 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
       const parsed = parseJson(res.text);
       if (!parsed.ok) {
         const m = /"receiptId"\s*:\s*(\d{1,15})\b/.exec(res.text);
+        // В лог — только код и длина тела (ВА-18).
         throw responseError(
           ctx,
           req,
           GreenApiErrorCode.INVALID_JSON,
           res.status,
-          'body is not JSON',
+          `body is not JSON (length ${res.text.length})`,
           m?.[1] ? Number(m[1]) : undefined,
         );
       }
@@ -334,39 +444,17 @@ export function createGreenApiClient(config: GreenApiClientConfig): GreenApiClie
     async deleteNotification(receiptId, options) {
       if (!Number.isSafeInteger(receiptId) || receiptId < 0)
         throw invalidArgument('deleteNotification', 'receiptId must be a non-negative integer');
-      const { res, req } = await call('deleteNotification', 'DELETE', options, {
-        url: { pathSuffix: [receiptId] },
-      });
-      // 500 «…findUnAckedMessage…» — уведомление не найдено: считать удалённым (§5.4).
-      if (res.status >= 500 && res.text.includes('findUnAckedMessage')) {
-        return {
-          result: false,
-          reason: 'notification not found (findUnAckedMessage)',
-          alreadyDeleted: true,
-        };
-      }
-      if (res.status < 200 || res.status >= 300) throw httpError(ctx, req, res);
-      const parsed = parseJson(res.text);
-      if (!parsed.ok)
-        throw responseError(
-          ctx,
-          req,
-          GreenApiErrorCode.INVALID_JSON,
-          res.status,
-          'body is not JSON',
-        );
-      const v = parsed.value;
-      if (!isRecord(v) || typeof v.result !== 'boolean') {
-        throw responseError(
-          ctx,
-          req,
-          GreenApiErrorCode.UNEXPECTED_RESPONSE,
-          res.status,
-          'missing result',
-        );
-      }
-      const reason = typeof v.reason === 'string' ? v.reason : '';
-      return { result: v.result, reason, alreadyDeleted: !v.result };
+      // Сеть / таймаут / 429 / 499 / 5xx: до 3 повторов 1 → 2 → 4 с, затем ошибка наверх (§5.4, ВА-17).
+      return withRetries(
+        () => deleteOnce(receiptId, options),
+        (e) =>
+          e.code === GreenApiErrorCode.NETWORK ||
+          e.code === GreenApiErrorCode.TIMEOUT ||
+          e.code === GreenApiErrorCode.SERVER ||
+          e.code === GreenApiErrorCode.RATE_LIMITED,
+        DELETE_RETRY_DELAYS_MS,
+        options?.signal,
+      );
     },
 
     toString() {
