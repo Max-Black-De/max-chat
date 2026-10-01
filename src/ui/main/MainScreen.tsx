@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SESSION_TEXTS, selectCanWrite } from '../../store';
 import { Banners } from '../banners/Banners';
 import { ChatList } from '../chats/ChatList';
 import { ChatPane } from '../chats/ChatPane';
-import { NewChatDialog } from '../chats/NewChatDialog';
+import { NewChatDialog, type NewChatCloseReason } from '../chats/NewChatDialog';
 import { useChats } from '../chats/chatsContext';
+import { isNarrowViewport } from '../format';
 import { UI_TEXTS } from '../texts';
 import { useSession } from '../session/sessionContext';
 
@@ -22,6 +23,21 @@ export function MainScreen() {
   // Вкладка стала «только чтение» — диалог закрывается (Р-12, EC-S4).
   const showDialog = dialogOpen && canWrite;
   const chatOpen = chats.selectedChatId !== null;
+  const newChatRef = useRef<HTMLButtonElement>(null);
+
+  // Фокус после диалога: «Отмена» / Esc — обратно на «Новый чат»; чат создан — в поле ввода
+  // (на узком экране его забирает «Назад», ChatPane).
+  const closeDialog = (reason: NewChatCloseReason) => {
+    setDialogOpen(false);
+    requestAnimationFrame(() => {
+      if (reason === 'cancel') {
+        newChatRef.current?.focus();
+        return;
+      }
+      if (isNarrowViewport()) return;
+      document.querySelector<HTMLTextAreaElement>('[data-testid="composer-input"]')?.focus();
+    });
+  };
   return (
     <div
       className={`main${chatOpen ? ' main--chat-open' : ''}`}
@@ -35,6 +51,7 @@ export function MainScreen() {
               {UI_TEXTS.messagesLabel}
             </h1>
             <button
+              ref={newChatRef}
               type="button"
               className="button button--primary button--compact sidebar__new-chat"
               disabled={!canWrite}
@@ -75,13 +92,7 @@ export function MainScreen() {
       <section className="content">
         <ChatPane />
       </section>
-      {showDialog ? (
-        <NewChatDialog
-          onClose={() => {
-            setDialogOpen(false);
-          }}
-        />
-      ) : null}
+      {showDialog ? <NewChatDialog onClose={closeDialog} /> : null}
     </div>
   );
 }

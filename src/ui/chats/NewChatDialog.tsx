@@ -7,8 +7,14 @@ import { useChats } from './chatsContext';
  * Пока идёт checkAccount, «Создать», «Отмена» и Esc неактивны — второго запроса нет (EC-U7).
  * Запрос ограничен 15 с (п. 2.5, `CHECK_ACCOUNT_TIMEOUT_MS`), поэтому диалог не зависает.
  * При ошибке диалог остаётся с номером, «Создать» снова активна — это ручной повтор (ВА-7).
+ * Модальный: фокус по Tab не уходит на фон; куда вернуть фокус после закрытия, решает MainScreen.
  */
-export function NewChatDialog({ onClose }: { onClose: () => void }) {
+/** Как закрыт диалог: «Отмена» / Esc или чат создан (для возврата фокуса, MainScreen). */
+export type NewChatCloseReason = 'cancel' | 'created';
+
+const FOCUSABLE = 'input:not([disabled]), button:not([disabled])';
+
+export function NewChatDialog({ onClose }: { onClose: (reason: NewChatCloseReason) => void }) {
   const { createChat } = useChats();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +33,7 @@ export function NewChatDialog({ onClose }: { onClose: () => void }) {
     try {
       const result = await createChat(phone);
       if (result.ok) {
-        onClose();
+        onClose('created');
         return;
       }
       if (result.reason !== 'aborted') setError(result.error);
@@ -37,8 +43,24 @@ export function NewChatDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !busyRef.current) onClose();
+  // Модальный диалог: Tab и Shift+Tab не уходят из него на фон.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape' && !busyRef.current) {
+      onClose('cancel');
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusable = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE));
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   };
 
   return (
@@ -82,7 +104,9 @@ export function NewChatDialog({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               className="button button--ghost"
-              onClick={onClose}
+              onClick={() => {
+                onClose('cancel');
+              }}
               disabled={busy}
               data-testid="new-chat-cancel"
             >

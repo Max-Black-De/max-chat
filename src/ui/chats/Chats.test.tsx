@@ -697,3 +697,38 @@ describe('макет F6 (§4.0 п. 2, Р-28, Д-6e)', () => {
     expect(screen.getByTestId('chat-subtitle')).toHaveTextContent(TEST_PHONE_FORMATTED);
   });
 });
+
+describe('фокус в диалоге «Новый чат» (F7, доступность)', () => {
+  it('Tab и Shift+Tab не уходят из диалога на фон', async () => {
+    await openMain();
+    const dialog = openDialog();
+    const phone = screen.getByTestId('new-chat-phone');
+    const submit = screen.getByTestId('new-chat-submit');
+    expect(phone).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(submit).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(phone).toHaveFocus();
+  });
+
+  it('Esc — фокус обратно на «Новый чат»', async () => {
+    await openMain();
+    fireEvent.keyDown(openDialog(), { key: 'Escape' });
+    expect(screen.queryByTestId('new-chat-dialog')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByTestId('new-chat-button')).toHaveFocus();
+    });
+  });
+
+  it('чат создан — фокус в поле ввода нового чата', async () => {
+    await openMain({
+      routes: { checkAccount: [{ body: { exist: true, chatId: TEST_CHAT_ID, fromCache: false } }] },
+    });
+    openDialog();
+    submitPhone(TEST_PHONE);
+    await screen.findByTestId('chat-window');
+    await waitFor(() => {
+      expect(screen.getByTestId('composer-input')).toHaveFocus();
+    });
+  });
+});
