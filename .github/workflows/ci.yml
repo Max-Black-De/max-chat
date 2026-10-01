@@ -1,6 +1,10 @@
-# CI (ТЗ Д-5): npm ci → lint → typecheck → test → build на push в main и на каждый PR;
-# job secrets — gitleaks по всей истории git (все ветки и теги).
-# Секреты инстанса GREEN-API в CI не нужны и не используются: тесты работают только на моках.
+# CI (ТЗ Д-5) и деплой демо (Д-1) в одном workflow:
+#   check   — npm ci → lint → typecheck → test → build (BASE_PATH=/<repo>/) → verify:dist;
+#   secrets — gitleaks по всей истории git (все ветки и теги);
+#   deploy  — только push в main / ручной запуск на main и только после зелёных check и secrets:
+#             на GitHub Pages уходит ровно та сборка, которую проверил check.
+# Секреты инстанса GREEN-API в CI не нужны и не используются: тесты работают только на моках,
+# в сборку не попадает ни один VITE_*-креденшел (env сборки — только BASE_PATH).
 name: CI
 
 on:
@@ -14,7 +18,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # PR: новый пуш отменяет старый прогон. main: прогоны не отменяются, чтобы не оборвать деплой.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   HUSKY: 0 # git-хуки в CI не ставим
@@ -24,6 +29,9 @@ jobs:
     name: lint · typecheck · test · build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Д-1: GitHub Pages отдаёт проект по подпути /<repo>/ (vite.config.ts → base).
+      BASE_PATH: /${{ github.event.repository.name }}/
     steps:
       - uses: actions/checkout@v7
         with:
@@ -60,12 +68,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify dist (CSP-meta, без инлайн-скриптов, ассеты под base)
+        run: npm run verify:dist
+
       - name: Upload dist
         uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist
           retention-days: 7
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
 
   secrets:
     name: secrets (gitleaks)
@@ -96,9 +113,37 @@ jobs:
           "$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --no-banner --verbose
           --log-opts="--all" .
 
-  # Д-1 (позже): деплой демо на GitHub Pages из этого же workflow.
-  # Набросок:
-  #   - в job `check` собрать с BASE_PATH=/<repo>/ и загрузить actions/upload-pages-artifact;
-  #   - job `deploy`: needs: check, if: github.ref == 'refs/heads/main' && github.event_name == 'push',
-  #     permissions: { pages: write, id-token: write }, environment: github-pages,
-  #     steps: actions/deploy-pages.
+  deploy:
+    name: deploy (GitHub Pages)
+    needs: [check, secrets]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false # не обрывать начатый деплой
+    steps:
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Check base path
+        # Сборка в check идёт с BASE_PATH=/<repo>/; если у Pages другой путь (свой домен,
+        # user-site), ассеты не загрузятся — лучше упасть до деплоя.
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          BUILD_BASE_PATH: /${{ github.event.repository.name }}
+        run: |
+          echo "Pages base_path: ${PAGES_BASE_PATH}"
+          test "${PAGES_BASE_PATH}" = "${BUILD_BASE_PATH}"
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
