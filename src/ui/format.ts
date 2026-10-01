@@ -11,6 +11,12 @@ export function formatTime(timestamp: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** ISO-время для `<time dateTime>`; для битого `timestamp` — `undefined` (атрибута нет). */
+export function isoDateTime(timestamp: number): string | undefined {
+  const d = new Date(timestamp * 1000);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
 /** Длина превью в кодовых точках. Остальное обрезает CSS (`text-overflow: ellipsis`). */
 export const PREVIEW_MAX_CODE_POINTS = 120;
 

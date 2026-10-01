@@ -1,13 +1,8 @@
 import { memo } from 'react';
 import { BANNER_TEXTS } from '../../api';
 import type { StoredMessage } from '../../store';
-import { formatTime } from '../format';
+import { formatTime, isoDateTime } from '../format';
 import { UI_TEXTS } from '../texts';
-
-function isoTime(timestamp: number): string | undefined {
-  const d = new Date(timestamp * 1000);
-  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
-}
 
 /**
  * Пузырь сообщения (§4.0 п. 2): свои — справа, входящие — слева, время `HH:MM` (EC-O1), у
@@ -53,7 +48,7 @@ export const MessageBubble = memo(function MessageBubble({
         <div className="message__meta">
           <time
             className="message__time"
-            dateTime={isoTime(message.timestamp)}
+            dateTime={isoDateTime(message.timestamp)}
             data-testid="message-time"
           >
             {formatTime(message.timestamp)}

@@ -1,5 +1,5 @@
 import { chatTitle, selectSortedChats } from '../../store';
-import { formatTime, previewText } from '../format';
+import { formatTime, isoDateTime, previewText } from '../format';
 import { UI_TEXTS } from '../texts';
 import { Avatar } from './Avatar';
 import { useChats } from './chatsContext';
@@ -42,7 +42,11 @@ export function ChatList() {
                     {title}
                   </span>
                   {last ? (
-                    <time className="chat-item__time" data-testid="chat-item-time">
+                    <time
+                      className="chat-item__time"
+                      dateTime={isoDateTime(last.timestamp)}
+                      data-testid="chat-item-time"
+                    >
                       {formatTime(last.timestamp)}
                     </time>
                   ) : null}
