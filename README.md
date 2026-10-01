@@ -1,7 +1,8 @@
 # MAX Chat — веб-чат для MAX через GREEN-API
 
-<!-- Д-5: бейдж CI появится после публикации репозитория на GitHub:
-[![CI](https://github.com/<owner>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/<repo>/actions/workflows/ci.yml) -->
+[![CI](https://github.com/Max-Black-De/max-chat/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Max-Black-De/max-chat/actions/workflows/ci.yml)
+
+**Демо:** https://max-black-de.github.io/max-chat/ (GitHub Pages, деплой из CI — см. [«Деплой»](#деплой-демо-д-1)).
 
 Простой веб-интерфейс в стиле [web.max.ru](https://web.max.ru/) для тестового задания
 «Фронтенд-разработчик React». Через инстанс [GREEN-API](https://green-api.com/v3/docs/) (MAX)
@@ -10,7 +11,7 @@
 
 Бэкенда нет: приложение — статический SPA, который ходит в API GREEN-API прямо из браузера.
 
-> Статус: **каркас (A1)**. Экраны и логика — задачи F1–F7.
+> Статус: **каркас (A1)**. Экраны и логика — задачи F1–F7; на демо пока заглушка каркаса.
 
 ## Требования
 
@@ -63,6 +64,7 @@ Env-переменные необязательны — см. `.env.example` (`V
 | ----------------------- | ------------------------------------------------ |
 | `npm run dev`           | dev-сервер Vite                                  |
 | `npm run build`         | `tsc -b` + production-сборка в `dist/`           |
+| `npm run verify:dist`   | проверка `dist/`: CSP-meta, без инлайна, base    |
 | `npm run preview`       | локальный просмотр сборки                        |
 | `npm run lint`          | ESLint (`--max-warnings=0`) + `prettier --check` |
 | `npm run format`        | Prettier `--write`                               |
@@ -85,6 +87,9 @@ src/
 ├── test/setup.ts    # настройка Vitest (jest-dom)
 ├── config.ts        # необязательная конфигурация из env Vite
 └── main.tsx         # точка входа
+plugins/             # Vite: base из BASE_PATH, CSP-meta в продакшен-сборке (Д-1)
+scripts/
+└── verify-dist.ts   # проверка собранного dist/index.html (CSP, инлайн, base)
 ```
 
 ## Разработка
@@ -93,8 +98,54 @@ src/
 `docs:`, `refactor:`, `chore:`, `ci:`); проверяются хуком `commit-msg` (husky + commitlint) и в CI.
 Подробнее — [CONTRIBUTING.md](CONTRIBUTING.md).
 
-CI (GitHub Actions, `.github/workflows/ci.yml`): `npm ci` → lint → typecheck → test → build на push в
-`main` и на каждый PR. Деплой демо (Д-1) будет добавлен в тот же workflow.
+CI (GitHub Actions, `.github/workflows/ci.yml`): `npm ci` → lint → typecheck → test → build →
+`verify:dist` и поиск секретов gitleaks по всей истории — на push в `main` и на каждый PR. Push в `main`
+после зелёных проверок деплоит демо на GitHub Pages (раздел ниже).
+
+## Деплой демо (Д-1)
+
+Демо — https://max-black-de.github.io/max-chat/. Выкладывается автоматически из
+`.github/workflows/ci.yml`, отдельного workflow нет:
+
+| Job       | Когда                                     | Что делает                                                                                                                        |
+| --------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `check`   | push в `main`, PR, ручной запуск          | lint → typecheck → test → build с `BASE_PATH=/<repo>/` → `verify:dist`; на `main` — `actions/upload-pages-artifact` (`dist/`)     |
+| `secrets` | там же                                    | gitleaks (бинарь фиксированной версии, проверка sha256) по всей истории всех веток, конфиг `.gitleaks.toml`                       |
+| `deploy`  | только push в `main` или ручной на `main` | `needs: [check, secrets]` → `actions/configure-pages` → проверка, что путь Pages совпадает с `BASE_PATH` → `actions/deploy-pages` |
+
+- Деплой — job в том же workflow, а не отдельный файл: так ТЗ (Д-5: «Деплой Д-1 — из этого же
+  workflow»), а `needs` гарантирует, что на Pages уходит ровно та сборка, которая прошла все проверки,
+  без повторной сборки и без связки workflow через `workflow_run`.
+- У `deploy` минимальные права (`contents: read`, `pages: write`, `id-token: write`), окружение
+  `github-pages`, `concurrency: pages` без отмены начатого деплоя. Прогоны на `main` не отменяют
+  друг друга; на PR новый пуш отменяет старый прогон.
+- Секретов в CI нет. В сборку попадает только `BASE_PATH`; учётные данные инстанса вводятся
+  в форме входа, `VITE_*`-креденшелов не бывает (`.env.example`).
+- **Подпуть.** Pages отдаёт проект по `/max-chat/`, поэтому `base` в `vite.config.ts` берётся из
+  `BASE_PATH` (по умолчанию `/` — для `npm run dev`, e2e и обычного `preview`). Пути к скриптам, стилям
+  и `favicon.svg` Vite переписывает сам; `verify:dist` проверяет, что все они под base.
+- **CSP.** Плагин `plugins/csp.ts` при `vite build` вставляет в начало `<head>`
+  `<meta http-equiv="Content-Security-Policy">` (политика — в «Решениях и компромиссах»). В dev
+  плагина нет: Vite вставляет инлайн-скрипты и `<style>` для HMR. `verify:dist` проверяет, что
+  meta на месте и стоит до первого `<script>`/`<link>`, что в `index.html` нет инлайн-скриптов,
+  `<style>`, `style=`, `on*=`, а в файлах сборки — строк, похожих на токен.
+- **`404.html` не нужен:** клиентского роутинга нет, приложение — одна страница по корню base.
+  Если появится роутер с путями, в сборку надо добавить `404.html` — копию `index.html`.
+
+Проверить продакшен-сборку локально так же, как на Pages:
+
+```bash
+export BASE_PATH=/max-chat/
+npm run build && npm run verify:dist
+npm run preview   # http://localhost:4173/max-chat/
+unset BASE_PATH
+```
+
+Поиск секретов локально ([gitleaks](https://github.com/gitleaks/gitleaks) 8.x):
+
+```bash
+gitleaks git --config .gitleaks.toml --redact --log-opts="--all" .
+```
 
 ## Краевые случаи
 
@@ -120,15 +171,78 @@ ID тестов — из чек-листа QA (Q1). Unit- и e2e-тесты по
 
 ## Решения и компромиссы
 
-_Заготовка — заполняется по ходу работы (Д-1)._
+Решения — по ТЗ проекта (номера Р-n, НФТ-n, Д-n; краевые случаи EC-\* — [docs/edge-cases.md](docs/edge-cases.md))
+и уже сделанному коду. То, что ещё в работе, помечено _(планируется, F-n)_.
 
-- **Без бэкенда** — _TODO: CORS у GREEN-API открыт, меньше точек отказа; минус — токен в браузере._
-- **Опрос** — _TODO: HTTP API, long polling `receiveTimeout=20`, строго receive → delete, одна вкладка через Web Lock._
-- **Дедупликация** — _TODO: ключ `chatId_idMessage`, слияние оптимистичного сообщения._
-- **Хранение токена** — _TODO: sessionStorage, а не localStorage._
-- **Чего нет и почему** — _TODO: `setSettings`, история, статусы доставки._
+- **Без бэкенда** (НФТ-2). Задание фронтендовое, а CORS у GREEN-API открыт: preflight, ответы с
+  ошибками и успешные `200` (`getStateInstance`, `getSettings`) отдают `Access-Control-Allow-Origin: *`.
+  Это подтверждено смоуком из браузера с `localhost` (спайк A2). Прокси не нужен, меньше точек
+  отказа: выкладывается только статика. Минус — токен живёт в браузере.
+- **Учётные данные — только в форме входа, в памяти и `sessionStorage`** (Р-2, НФТ-3). Не в
+  `localStorage`, не в env и не в сборке: всё `VITE_*` попадает в бандл. CI собирает без секретов,
+  `verify:dist` ищет в `dist/` строки, похожие на токен, gitleaks — во всей истории git. Минус —
+  после закрытия вкладки нужно войти заново. Токен не пишется в логи и тексты ошибок (маскирование —
+  F1), не попадает в URL страницы; `<meta name="referrer" content="no-referrer">`. Неустранимо: по
+  дизайну API токен — часть пути запроса, поэтому виден в DevTools → Network и в HAR (EC-X2).
+  _(маскирование и форма входа — планируется, F1–F2)_
+- **Опрос через HTTP API, а не вебхуки** (задание, Р-20). Вебхукам нужен публичный сервер, а
+  бэкенда нет. Long polling `receiveNotification?receiveTimeout=20` с таймаутом запроса 30 с, строго
+  receive → delete, один receive в полёте; «шумные» уведомления (группы, каналы, неизвестные чаты и
+  типы) не показываются, но всегда удаляются, иначе очередь встанет; при ошибках — backoff 1 → 30 с.
+  Минус — очередь у инстанса одна: если её читает другое приложение, уведомления до нас не дойдут
+  (EC-P15). _(планируется, F5)_
+- **Опрос в одной вкладке — Web Lock** `maxchat-poll-<idInstance>` (Р-12). Остальные вкладки
+  только читают и показывают баннер, а когда опрашивающая закрыта, сами захватывают замок. Без Web
+  Locks API — опрос без замка и постоянный баннер (EC-S5). Синхронизации ленты между вкладками нет.
+  _(планируется, F5)_
+- **Дедупликация** (§6.3): ключ `chatId_idMessage`, слияние оптимистичного сообщения с ответом
+  `sendMessage` и уведомлением `outgoingAPIMessageReceived`, в том числе когда уведомление пришло
+  раньше ответа. По тексту сообщения не сопоставляются. `chatId`, `idMessage` — строки:
+  18-значные `idMessage` не помещаются в `Number`. _(типы — сделано; логика — планируется, F5)_
+- **Чего нет и почему.** `setSettings` не вызывается (Р-6): приложение не меняет настройки
+  инстанса пользователя, а только читает `getSettings` и показывает предупреждения П-1…П-4. История
+  чата не загружается (Р-4): чат начинается с пустой ленты; `getChatHistory` — опция Д-7 за флагом
+  `VITE_FEATURE_HISTORY` (по умолчанию выключен). Статусы доставки и прочтения не показываются
+  (Р-14): на проверенном инстансе `outgoingWebhook=no`; опция Д-4 — только при `outgoingWebhook=yes`.
+- **CSP через `<meta>`, только в продакшен-сборке** (Д-1, EC-X3; `plugins/csp.ts`):
+
+  ```
+  default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
+  connect-src https:; object-src 'none'; base-uri 'none'; form-action 'none'
+  ```
+
+  - На GitHub Pages нельзя задать HTTP-заголовки, поэтому только meta. В meta **не работают**
+    `frame-ancestors` (и `X-Frame-Options` тоже не задать) — защиты от встраивания демо в чужой
+    `<iframe>` нет; не работают и `report-uri`/`report-to`, `sandbox`.
+  - `connect-src https:`, а не список хостов: `apiUrl` пользователь задаёт сам (Р-1), хост у
+    инстансов разный. Минус — запросы разрешены на любой `https:`-адрес; от сторонних скриптов
+    защищает `script-src 'self'` (сторонних скриптов и аналитики нет, НФТ-3).
+  - `style-src 'self'`: стили — только файлами. `style={…}` в React работает (это CSSOM), а
+    `<style>` и атрибут `style="…"` в разметке, CSS-in-JS со вставкой `<style>` — нет.
+  - `form-action 'none'`: нативная отправка форм заблокирована — формы обрабатываются в JS
+    (`onSubmit` + `preventDefault`).
+  - В dev CSP нет: Vite вставляет инлайн-скрипты и стили для HMR.
+
+- **Хранение чатов** — `localStorage` с ключами `maxchat:<idInstance>:v1:…`; сбой записи — работа
+  в памяти с баннером (Р-2). _(планируется, F3)_
+- **Стек — по ТЗ** (Р-9, НФТ-1): React **18** (не 19), TypeScript strict, Vite, обычный CSS без
+  UI-китов, Vitest + Testing Library; e2e — Playwright на моках (Р-25, Д-2; _планируется_). Node **22 LTS** —
+  `.nvmrc` и `engines`, CI берёт ту же версию.
+- **Демо — GitHub Pages из CI** (Р-7, Р-24): статика, HTTPS, деплой только после зелёных проверок
+  (раздел «Деплой демо»).
 
 ## Ограничения
 
-_Заполняется в F7 / Д-1 (тариф MAX Developer: 3 чата и 100 проверок номеров в месяц; одна
-опрашивающая вкладка; только текст; только личные чаты)._
+Приложение проверялось на бесплатном тарифе **MAX Developer** (Р-26). Реальные `chatId`, номера и
+`idInstance` в README и репозиторий не кладутся.
+
+- Лимиты Developer: **3 чата в месяц** (группы и каналы тоже считаются; номер `…@c.us` и `chatId` одного
+  человека — два разных чата) и **100 проверок номеров** (`CheckAccount`) в месяц; обновляются 1-го числа.
+- Авторские прогоны и демонстрация писали только в один заранее заведённый чат. Получатели в
+  приложении не зашиты: вы работаете со своим инстансом и своими чатами, и на Developer у вас те же лимиты.
+- При исчерпании лимита (HTTP 466): сообщение «не отправлено» с пояснением и баннер; при исчерпании
+  `CheckAccount` — текст в диалоге «Новый чат»; при уведомлении `quotaExceeded` — баннер. Автоповторов
+  нет. Снять лимит — тариф MAX Business или следующий месяц. _(планируется, F1/F4/F5)_
+- Совет: пишите в уже использованные чаты. Чат по номеру создаётся один раз, дальше `chatId` берётся
+  из кеша «номер → chatId» без повторного `CheckAccount`.
+- Опрашивает одна вкладка (Р-12); только текстовые сообщения; только личные чаты; десктоп от 1024 px.
