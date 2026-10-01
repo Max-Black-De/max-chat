@@ -42,4 +42,9 @@ export const UI_TEXTS = {
   composerLabel: 'Текст сообщения',
   messagesLabel: 'Сообщения',
   noMessages: 'Сообщений пока нет',
+  /** Узкий экран (Д-6e): одна колонка, из чата — «Назад» к списку. */
+  back: 'Назад',
+  backLabel: 'Назад к списку чатов',
+  /** Не из ТЗ: подпись к idInstance в шапке списка. */
+  instanceLabel: 'Инстанс',
 } as const;

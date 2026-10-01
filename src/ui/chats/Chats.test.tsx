@@ -627,3 +627,73 @@ describe('перезагрузка (п. 2.10)', () => {
     expect(again.api.callsOf('checkAccount')).toHaveLength(0);
   });
 });
+
+describe('макет F6 (§4.0 п. 2, Р-28, Д-6e)', () => {
+  /** matchMedia в jsdom нет: подменяем ответ для узкого / широкого экрана. */
+  function stubViewport(narrow: boolean) {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: narrow && query.includes('max-width: 767px'),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+  }
+
+  it('шапка списка: «Сообщения», idInstance и «Выйти»; аватар скрыт от скринридеров', async () => {
+    const local = memoryStorage(storedChats([chatFixture({ chatName: 'Собеседник' })]));
+    await openMain({ local });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Сообщения');
+    expect(screen.getByTestId('session-idInstance')).toHaveTextContent(TEST_ID_INSTANCE);
+    expect(screen.getByRole('button', { name: 'Новый чат' })).toBe(
+      screen.getByTestId('new-chat-button'),
+    );
+    const avatar = within(firstItem()).getByTestId('chat-avatar');
+    expect(avatar).toHaveAttribute('aria-hidden', 'true');
+    expect(avatar).toHaveTextContent('С');
+    expect(firstItem()).toHaveAccessibleName(/^Собеседник/);
+  });
+
+  it('одна колонка: открыть чат → «Назад» → список, фокус на пункте чата', async () => {
+    stubViewport(true);
+    const local = memoryStorage(storedChats([chatFixture({ chatName: 'Собеседник' })]));
+    await openMain({ local });
+    const main = screen.getByTestId('main-screen');
+    expect(main).toHaveAttribute('data-pane', 'list');
+    expect(main).not.toHaveClass('main--chat-open');
+
+    fireEvent.click(firstItem());
+    expect(main).toHaveAttribute('data-pane', 'chat');
+    expect(main).toHaveClass('main--chat-open');
+    const back = screen.getByTestId('chat-back');
+    // Список скрыт CSS — фокус переходит на «Назад».
+    expect(back).toHaveFocus();
+    expect(back).toHaveAccessibleName('Назад к списку чатов');
+
+    fireEvent.click(back);
+    expect(main).toHaveAttribute('data-pane', 'list');
+    expect(screen.getByTestId('chat-empty')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(firstItem()).toHaveFocus();
+    });
+  });
+
+  it('широкий экран: фокус при открытии чата не переносится', async () => {
+    stubViewport(false);
+    const local = memoryStorage(storedChats([chatFixture()]));
+    await openMain({ local });
+    firstItem().focus();
+    fireEvent.click(firstItem());
+    expect(screen.getByTestId('chat-back')).not.toHaveFocus();
+    expect(firstItem()).toHaveFocus();
+  });
+
+  it('длинное имя в шапке целиком в title (EC-N12), номер — подзаголовком', async () => {
+    const name = 'Очень длинное имя собеседника '.repeat(8).trim();
+    const local = memoryStorage(storedChats([chatFixture({ chatName: name })]));
+    await openMain({ local });
+    fireEvent.click(firstItem());
+    expect(screen.getByTestId('chat-title')).toHaveAttribute('title', name);
+    expect(screen.getByTestId('chat-title')).toHaveAttribute('dir', 'auto');
+    expect(screen.getByTestId('chat-subtitle')).toHaveTextContent(TEST_PHONE_FORMATTED);
+  });
+});

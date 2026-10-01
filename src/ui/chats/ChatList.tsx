@@ -1,6 +1,7 @@
 import { chatTitle, selectSortedChats } from '../../store';
 import { formatTime, previewText } from '../format';
 import { UI_TEXTS } from '../texts';
+import { Avatar } from './Avatar';
 import { useChats } from './chatsContext';
 
 /**
@@ -21,6 +22,7 @@ export function ChatList() {
       {chats.map((chat) => {
         const selected = chat.chatId === state.selectedChatId;
         const last = chat.lastMessage;
+        const title = chatTitle(chat);
         return (
           <li key={chat.chatId}>
             <button
@@ -33,30 +35,33 @@ export function ChatList() {
               data-testid="chat-item"
               data-chat-id={chat.chatId}
             >
-              <span className="chat-item__row">
-                <span className="chat-item__title" dir="auto" data-testid="chat-item-title">
-                  {chatTitle(chat)}
-                </span>
-                {last ? (
-                  <time className="chat-item__time" data-testid="chat-item-time">
-                    {formatTime(last.timestamp)}
-                  </time>
-                ) : null}
-              </span>
-              <span className="chat-item__row">
-                {/* EC-U5: dir="auto" — у элемента текста, не у контейнера. */}
-                <span className="chat-item__preview" dir="auto" data-testid="chat-item-preview">
-                  {last ? previewText(last.text) : ''}
-                </span>
-                {chat.unread > 0 ? (
-                  <span
-                    className="chat-item__unread"
-                    data-testid="chat-item-unread"
-                    aria-label={`${UI_TEXTS.unreadLabel}: ${String(chat.unread)}`}
-                  >
-                    {chat.unread > 99 ? '99+' : chat.unread}
+              <Avatar chatId={chat.chatId} title={title} />
+              <span className="chat-item__body">
+                <span className="chat-item__row">
+                  <span className="chat-item__title" dir="auto" data-testid="chat-item-title">
+                    {title}
                   </span>
-                ) : null}
+                  {last ? (
+                    <time className="chat-item__time" data-testid="chat-item-time">
+                      {formatTime(last.timestamp)}
+                    </time>
+                  ) : null}
+                </span>
+                <span className="chat-item__row">
+                  {/* EC-U5: dir="auto" — у элемента текста, не у контейнера. */}
+                  <span className="chat-item__preview" dir="auto" data-testid="chat-item-preview">
+                    {last ? previewText(last.text) : ''}
+                  </span>
+                  {chat.unread > 0 ? (
+                    <span
+                      className="chat-item__unread"
+                      data-testid="chat-item-unread"
+                      aria-label={`${UI_TEXTS.unreadLabel}: ${String(chat.unread)}`}
+                    >
+                      {chat.unread > 99 ? '99+' : chat.unread}
+                    </span>
+                  ) : null}
+                </span>
               </span>
             </button>
           </li>

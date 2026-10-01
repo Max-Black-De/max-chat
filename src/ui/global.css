@@ -1,13 +1,47 @@
-/* Глобальные стили. Светлая тема в стиле web.max.ru (НФТ-7), без UI-китов (Р-9). */
+/*
+ * Глобальные стили (F6). Светлая тема по мотивам web.max.ru (НФТ-7): только общая идея макета,
+ * без их ассетов, логотипов и шрифтов; без UI-китов (Р-9). Только CSS-файлы (CSP style-src 'self').
+ * Узкий экран — Д-6e.
+ */
+
+/* ---------- Переменные ---------- */
+
 :root {
+  --c-bg: #ffffff;
+  --c-bg-muted: #f2f4f7;
+  --c-chat-bg: #eef1f6;
+  --c-border: #e1e5eb;
+  --c-text: #1b1f24;
+  --c-text-muted: #5f6774;
+  --c-accent: #2a62f0;
+  --c-accent-hover: #1f56e0;
+  --c-accent-text: #1f56e0;
+  --c-on-accent: #ffffff;
+  --c-focus: #2a62f0;
+  --c-hover: #f2f4f7;
+  --c-selected: #e4ecff;
+  --c-bubble-in: #ffffff;
+  --c-bubble-out: #d9e5ff;
+  --c-error-bg: #fdecec;
+  --c-error: #b42318;
+  --c-warning-bg: #fff4d6;
+  --c-warning: #7a4d00;
+  --c-info-bg: #e8f0ff;
+  --c-info: #1d3f8f;
+  --c-shadow: rgb(16 24 40 / 8%);
+  --c-backdrop: rgb(16 24 40 / 45%);
+  --radius: 12px;
+  --radius-bubble: 16px;
+  --sidebar-width: 340px;
+
   font-family:
     system-ui,
     -apple-system,
     'Segoe UI',
     Roboto,
     sans-serif;
-  color: #1f2329;
-  background-color: #ffffff;
+  color: var(--c-text);
+  background-color: var(--c-bg);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -15,37 +49,39 @@
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  min-width: 1024px; /* Р-19: десктоп от 1024 px */
-  min-height: 100vh;
+html,
+body,
+#root {
+  height: 100%;
 }
 
-:root {
-  --c-bg: #ffffff;
-  --c-bg-muted: #f3f5f8;
-  --c-border: #e2e6ec;
-  --c-text-muted: #6b7380;
-  --c-accent: #2f6bff;
-  --c-accent-hover: #1f56e0;
-  --c-error-bg: #fdecec;
-  --c-error: #c62828;
-  --c-warning-bg: #fff6e0;
-  --c-warning: #8a5a00;
-  --c-info-bg: #eaf1ff;
-  --radius: 12px;
+body {
+  margin: 0;
+  /* Р-19: макет MVP — от 1024 px; ниже 768 px — одна колонка (Д-6e), 375 px без гор. скролла. */
+  min-width: 320px;
+}
+
+/* Фокус с клавиатуры виден на всех интерактивных элементах. */
+:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
 }
 
 /* ---------- Кнопки и поля ---------- */
 
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font: inherit;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 14px;
   cursor: pointer;
   background: none;
   color: inherit;
+  white-space: nowrap;
 }
 .button:disabled {
   opacity: 0.55;
@@ -53,7 +89,7 @@ body {
 }
 .button--primary {
   background: var(--c-accent);
-  color: #fff;
+  color: var(--c-on-accent);
 }
 .button--primary:not(:disabled):hover {
   background: var(--c-accent-hover);
@@ -61,10 +97,23 @@ body {
 .button--ghost {
   border-color: var(--c-border);
 }
+.button--ghost:not(:disabled):hover {
+  background: var(--c-hover);
+}
 .button--small {
   padding: 4px 10px;
   font-size: 0.875rem;
   border-color: currentColor;
+}
+.button--compact {
+  padding: 6px 12px;
+  font-size: 0.875rem;
+}
+.button--link {
+  padding: 0;
+  border: 0;
+  color: var(--c-accent-text);
+  text-decoration: underline;
 }
 
 .field {
@@ -79,12 +128,15 @@ body {
 .field input {
   font: inherit;
   width: 100%;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: var(--c-bg);
+  color: var(--c-text);
 }
 .field input:focus {
-  outline: 2px solid var(--c-accent);
+  outline: 2px solid var(--c-focus);
   outline-offset: -1px;
 }
 .field input[aria-invalid='true'] {
@@ -110,12 +162,24 @@ body {
   color: var(--c-warning);
 }
 
+.hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-text-muted);
+}
+/* Подсказка «только чтение» (Р-12, EC-S4) у «Новый чат» и у поля ввода. */
+.hint--readonly {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--c-info-bg);
+  color: var(--c-info);
+}
+
 .spinner {
   display: inline-block;
+  flex: none;
   width: 1em;
   height: 1em;
-  margin-right: 8px;
-  vertical-align: -0.15em;
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
@@ -126,21 +190,37 @@ body {
     transform: rotate(360deg);
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
 
 /* ---------- Вход (§4.0 п. 1) ---------- */
 
 .login {
   display: grid;
   place-items: center;
-  min-height: 100vh;
+  min-height: 100%;
+  padding: 24px 16px;
   background: var(--c-bg-muted);
 }
 .login__card {
-  width: 400px;
+  width: min(400px, 100%);
   padding: 32px;
   background: var(--c-bg);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgb(16 24 40 / 8%);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px var(--c-shadow);
+}
+/* Знак приложения — простая CSS-фигура «облачко», не логотип MAX. */
+.login__card::before {
+  content: '';
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 16px;
+  border-radius: 14px 14px 14px 4px;
+  background: linear-gradient(135deg, var(--c-accent), #7a5cff);
 }
 .login__title {
   margin: 0 0 4px;
@@ -153,7 +233,7 @@ body {
 .login__error {
   margin: 0 0 16px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--c-error-bg);
   color: var(--c-error);
 }
@@ -162,7 +242,9 @@ body {
 }
 .login__advanced summary {
   cursor: pointer;
+  width: fit-content;
   margin-bottom: 10px;
+  border-radius: 4px;
   color: var(--c-text-muted);
 }
 .login__submit {
@@ -171,54 +253,103 @@ body {
 }
 .login__link {
   display: block;
-  margin-top: 16px;
+  width: fit-content;
+  margin: 16px auto 0;
+  border-radius: 4px;
   text-align: center;
-  color: var(--c-accent);
+  color: var(--c-accent-text);
 }
 
-/* ---------- Основной экран (§4.0 п. 2), каркас — финальный стиль в F6 ---------- */
+/* ---------- Основной экран (§4.0 п. 2) ---------- */
 
+/* Две колонки: список слева, справа баннеры (§4.0 п. 4) над окном чата. */
 .main {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'sidebar banners'
+    'sidebar content';
   height: 100vh;
+  height: 100dvh;
 }
 .sidebar {
+  grid-area: sidebar;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  min-width: 0;
+  min-height: 0;
   border-right: 1px solid var(--c-border);
   background: var(--c-bg);
 }
 .sidebar__header {
+  display: grid;
+  gap: 10px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--c-border);
+}
+.sidebar__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
+.sidebar__title {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+.sidebar__account {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--c-text-muted);
+}
 .sidebar__instance {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-weight: 600;
+  color: var(--c-text);
 }
 .content {
+  grid-area: content;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--c-bg-muted);
+  background: var(--c-chat-bg);
 }
 .content__empty {
   flex: 1;
   display: grid;
   place-content: center;
+  padding: 24px;
+}
+.empty-state {
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 16px;
+  background: var(--c-bg);
   color: var(--c-text-muted);
+  text-align: center;
 }
 
-/* ---------- Баннеры (§4.0 п. 4) ---------- */
+/* ---------- Баннеры (§4.0 п. 4): стопка над лентой, порядок задаёт Banners.tsx ---------- */
 
+.main > .banners {
+  grid-area: banners;
+  min-width: 0;
+}
 .banners {
   display: grid;
   gap: 1px;
+  max-height: 40vh;
+  overflow-y: auto;
 }
 .banner {
   display: flex;
@@ -228,7 +359,9 @@ body {
 }
 .banner__text {
   flex: 1;
+  min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 .banner--error {
   background: var(--c-error-bg);
@@ -240,43 +373,89 @@ body {
 }
 .banner--info {
   background: var(--c-info-bg);
+  color: var(--c-info);
 }
 .banner__close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   font: inherit;
   font-size: 1.25rem;
   line-height: 1;
   border: none;
+  border-radius: 50%;
   background: none;
   color: inherit;
   cursor: pointer;
 }
-
-/* ---------- Список чатов (§4.0 п. 2), финальный стиль — F6 ---------- */
-
-.sidebar__hint {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--c-text-muted);
+.banner__close:hover {
+  background: rgb(127 127 127 / 15%);
 }
+
+/* ---------- Аватар (декоративный) ---------- */
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+.avatar--sm {
+  width: 40px;
+  height: 40px;
+  font-size: 1.0625rem;
+}
+.avatar--0 {
+  background: #2f62d0;
+}
+.avatar--1 {
+  background: #2e7d32;
+}
+.avatar--2 {
+  background: #c2410c;
+}
+.avatar--3 {
+  background: #7b3fb0;
+}
+.avatar--4 {
+  background: #a15c00;
+}
+.avatar--5 {
+  background: #00796b;
+}
+
+/* ---------- Список чатов (§4.0 п. 2) ---------- */
+
 .chat-list {
-  list-style: none;
-  margin: 0 -12px;
-  padding: 0;
-  overflow-y: auto;
   flex: 1;
   min-height: 0;
+  margin: 0;
+  padding: 6px 8px;
+  list-style: none;
+  overflow-y: auto;
 }
 .chat-list__empty {
-  margin: 4px;
+  margin: 24px 16px;
   color: var(--c-text-muted);
-  font-size: 0.875rem;
+  text-align: center;
 }
 .chat-item {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  padding: 10px 16px;
+  min-width: 0;
+  padding: 8px 10px;
   border: 0;
+  border-radius: 12px;
   background: none;
   font: inherit;
   color: inherit;
@@ -284,11 +463,20 @@ body {
   cursor: pointer;
 }
 .chat-item:hover {
-  background: var(--c-bg-muted);
+  background: var(--c-hover);
+}
+.chat-item:focus-visible {
+  outline-offset: -2px;
 }
 .chat-item--selected,
 .chat-item--selected:hover {
-  background: var(--c-info-bg);
+  background: var(--c-selected);
+}
+.chat-item__body {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
 }
 .chat-item__row {
   display: flex;
@@ -309,7 +497,7 @@ body {
   font-size: 0.75rem;
   color: var(--c-text-muted);
 }
-/* EC-U3: превью обрезает CSS в одну строку. */
+/* EC-U3: превью в одну строку; длинное обрезает CSS, JS режет по кодовым точкам (format.ts). */
 .chat-item__preview {
   flex: 1;
   min-width: 0;
@@ -326,29 +514,59 @@ body {
   padding: 0 6px;
   border-radius: 10px;
   background: var(--c-accent);
-  color: #fff;
+  color: var(--c-on-accent);
   font-size: 0.75rem;
+  font-weight: 600;
   line-height: 20px;
   text-align: center;
 }
 
-/* ---------- Окно чата (шапка — F3, лента и ввод — F4) ---------- */
+/* ---------- Окно чата ---------- */
 
 .chat-window {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 .chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg);
+}
+.chat-header .avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 1.0625rem;
+}
+/* «Назад» — только на узком экране (Д-6e). */
+.chat-header__back {
+  display: none;
+  flex: none;
+  padding: 6px 10px;
+}
+.chat-header__text {
   display: grid;
   gap: 2px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--c-border);
+  flex: 1;
+  min-width: 0;
+}
+/* EC-N12: длинное имя — многоточие, номер подзаголовком (Р-15). */
+.chat-header__title,
+.chat-header__subtitle {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .chat-header__title {
   margin: 0;
   font-size: 1rem;
+  font-weight: 600;
 }
 .chat-header__subtitle {
   font-size: 0.8125rem;
@@ -360,7 +578,7 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: var(--c-bg-muted);
+  background: var(--c-chat-bg);
 }
 
 /* ---------- Лента (§4.0 п. 2, п. 5.6) ---------- */
@@ -369,14 +587,18 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px 20px;
 }
 .message-list__empty {
-  margin: 0;
-  padding-top: 24px;
-  text-align: center;
+  width: fit-content;
+  margin: 24px auto 0;
+  padding: 6px 14px;
+  border-radius: 14px;
+  background: var(--c-bg);
   color: var(--c-text-muted);
   font-size: 0.875rem;
+  text-align: center;
 }
 .message-list__items {
   display: flex;
@@ -394,18 +616,19 @@ body {
   border: 1px solid var(--c-border);
   border-radius: 16px;
   background: var(--c-bg);
-  color: var(--c-accent);
+  color: var(--c-accent-text);
   font: inherit;
   font-size: 0.875rem;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgb(20 24 31 / 12%);
+  box-shadow: 0 2px 8px var(--c-shadow);
 }
 
 /* Свои — справа, входящие — слева. Направление задаёт контейнер; dir="auto" только у текста (EC-U5). */
 .message {
   display: flex;
   flex-direction: column;
-  max-width: 70%;
+  min-width: 0;
+  max-width: min(70%, 640px);
 }
 .message--in {
   align-self: flex-start;
@@ -417,13 +640,18 @@ body {
 }
 .message__bubble {
   max-width: 100%;
+  min-width: 0;
   padding: 8px 12px 6px;
-  border-radius: var(--radius);
-  background: var(--c-bg);
-  box-shadow: 0 1px 1px rgb(20 24 31 / 6%);
+  border-radius: var(--radius-bubble);
+  background: var(--c-bubble-in);
+  box-shadow: 0 1px 1px var(--c-shadow);
+}
+.message--in .message__bubble {
+  border-bottom-left-radius: 4px;
 }
 .message--out .message__bubble {
-  background: #dbe7ff;
+  border-bottom-right-radius: 4px;
+  background: var(--c-bubble-out);
 }
 .message__bubble--error {
   outline: 1px solid var(--c-error);
@@ -461,18 +689,15 @@ body {
   color: var(--c-error);
   text-align: end;
 }
-.button--link {
-  padding: 0;
-  border: 0;
-  color: var(--c-accent);
-  text-decoration: underline;
+.message__error .button--link {
+  color: var(--c-accent-text);
 }
 
 /* ---------- Поле ввода (п. 3.1, п. 3.5) ---------- */
 
 .composer {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   padding: 10px 20px 12px;
   border-top: 1px solid var(--c-border);
   background: var(--c-bg);
@@ -488,28 +713,35 @@ body {
   /* Ширина задана явно: field-sizing растит только высоту, длинное слово переносится. */
   width: 100%;
   min-width: 0;
-  min-height: 40px;
+  min-height: 42px;
   max-height: 160px;
-  padding: 9px 12px;
+  padding: 10px 14px;
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: 20px;
+  background: var(--c-bg-muted);
+  color: var(--c-text);
   font: inherit;
   resize: none;
   overflow-wrap: anywhere;
   field-sizing: content;
 }
 .composer__input:focus {
-  outline: 2px solid var(--c-accent);
+  outline: 2px solid var(--c-focus);
   outline-offset: -1px;
+  background: var(--c-bg);
 }
 .composer__input:disabled {
-  background: var(--c-bg-muted);
+  cursor: not-allowed;
 }
 .composer__actions {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
+}
+.composer__send {
+  min-height: 42px;
+  border-radius: 20px;
 }
 .composer__counter {
   font-size: 0.75rem;
@@ -519,11 +751,6 @@ body {
   color: var(--c-error);
   font-weight: 600;
 }
-.composer__hint {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--c-text-muted);
-}
 
 /* ---------- Диалог «Новый чат» (§4.0 п. 3) ---------- */
 
@@ -532,14 +759,15 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(20 24 31 / 40%);
+  padding: 16px;
+  background: var(--c-backdrop);
 }
 .dialog {
-  width: 360px;
+  width: min(380px, 100%);
   padding: 24px;
-  border-radius: var(--radius);
+  border-radius: 16px;
   background: var(--c-bg);
-  box-shadow: 0 12px 40px rgb(20 24 31 / 20%);
+  box-shadow: 0 12px 40px var(--c-shadow);
 }
 .dialog__title {
   margin: 0 0 16px;
@@ -549,4 +777,51 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* ---------- Ширина окна ---------- */
+
+/* 768–1023 px — вне Р-19, колонка списка уже. На ≥ 1024 px макет MVP не меняется. */
+@media (max-width: 1023px) {
+  :root {
+    --sidebar-width: 300px;
+  }
+}
+
+/* Д-6e: < 768 px — одна колонка, список ↔ чат; баннеры над обеими. Граница = NARROW_MEDIA_QUERY. */
+@media (max-width: 767px) {
+  .main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'banners'
+      'pane';
+  }
+  .sidebar,
+  .content {
+    grid-area: pane;
+    border-right: 0;
+  }
+  .main--chat-open .sidebar,
+  .main:not(.main--chat-open) .content {
+    display: none;
+  }
+  .chat-header {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .chat-header__back {
+    display: inline-flex;
+  }
+  .message-list {
+    padding: 12px;
+  }
+  .message {
+    max-width: 85%;
+  }
+  .composer {
+    padding: 8px 12px 10px;
+  }
+  .login__card {
+    padding: 24px 20px;
+  }
 }

@@ -95,7 +95,7 @@ export function Composer({ chatId }: { chatId: string }) {
         </div>
       </div>
       {canWrite ? null : (
-        <p className="composer__hint" data-testid="composer-readonly-hint">
+        <p className="hint hint--readonly" data-testid="composer-readonly-hint">
           {SESSION_TEXTS.otherTabReadOnly}
         </p>
       )}
