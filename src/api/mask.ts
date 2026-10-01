@@ -27,6 +27,24 @@ export function redactSecret(text: string, secret: string): string {
   return out;
 }
 
+/** Замена номеров телефонов и chatId в тексте ответа сервера. */
+export const PERSONAL_DATA_MASK = '<id>';
+
+/**
+ * Номера телефонов и chatId (`79990000001`, `+79990000001`, `-10000000`, `…@c.us`, `…@g.us`)
+ * в тексте причины от сервера — тот попадает в `GreenApiError.reason` и в лог, а номер и chatId
+ * туда попадать не должны (§5.4, НФТ-3). Маскируются серии от 6 цифр (с суффиксом `@…`):
+ * в текстах причин GREEN-API, по которым классифицируются ошибки, таких чисел нет.
+ */
+export function redactPersonalData(text: string): string {
+  return text.replace(/[+-]?\d{6,}(?:@[\w.]+)?/g, PERSONAL_DATA_MASK);
+}
+
+/** Текст причины от сервера для `reason`/лога: без токена, номеров и chatId, не длиннее 300. */
+export function sanitizeReason(text: string, secret: string): string {
+  return truncate(redactPersonalData(redactSecret(text, secret)));
+}
+
 /** Обрезает длинные строки (ответы сервера в тексте ошибки). */
 export function truncate(text: string, max = 300): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;

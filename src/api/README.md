@@ -115,28 +115,31 @@ type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };   // ест�
 `FALLBACK_TEXTS` — строки, которых в ТЗ нет (отмена, «Неизвестная ошибка» и т. п.). Тест `messages.test.ts`
 сверяет каждую строку с эталонами, скопированными из ТЗ, посимвольно (файл ТЗ в репозиторий не входит).
 
-## Токен
+## Токен и персональные данные
 
 - хранится только в замыкании `createGreenApiClient`; у объекта клиента нет поля с токеном;
   `String(client)`, `JSON.stringify(client)`, `util.inspect(client)` → `token=***`;
 - тексты ошибок строятся без URL; `maskedUrl` — с `***`; ответы сервера чистятся от токена (в т. ч.
   URL-кодированного) и обрезаются до 300 символов; исходная ошибка `fetch` не прикладывается (`cause`),
   т. к. её текст может содержать URL;
+- номер телефона и chatId в лог не пишутся: тела уведомлений и запросов не логируются, а причина от
+  сервера в `reason` очищается `redactPersonalData` (серии от 6 цифр, в том числе с `@c.us`/`@g.us`,
+  заменяются на `<id>`);
 - по умолчанию клиент ничего не пишет в `console`.
 
 ## Чистые функции (для тестов и других модулей)
 
 `buildMethodUrl`, `buildMaskedUrl`, `normalizeApiUrl`, `validateApiUrl`, `validateCredentials` (url.ts);
 `parseRetryAfter`, `retryHintFor` (http.ts); `maskToken`, `maskUrl`,
-`redactSecret` (mask.ts); `parseQuota466Body`, `parseQuotaExceededNotification` (quota.ts); `normalizePhone`,
+`redactSecret`, `redactPersonalData` (mask.ts); `parseQuota466Body`, `parseQuotaExceededNotification` (quota.ts); `normalizePhone`,
 `isNormalizedPhone`, `toCheckAccountPhone`, `PHONE_FORMAT_ERROR` (phone.ts, Р-10); `validateSendChatId`,
 `messageLength` (client.ts); тексты — messages.ts. Извлечение текста уведомления (§5.3) —
 `extractMessageText` в `src/notifications/extractText.ts`.
 
 ## Тесты и фикстуры
 
-`src/api/__tests__/`: `url`, `client`, `config`, `errors`, `quota`, `masking`, `messages`, `phone`, `retries`,
-`session`
+`src/api/__tests__/`: `url`, `client`, `config`, `errors`, `quota`, `masking`, `privacy`, `messages`, `phone`,
+`retries`, `session`, `incomingMedia` (входящее `imageMessage`, как в маскированном образце QA)
 (+ `src/notifications/extractText.test.ts`). `fetch` — всегда мок, глобальный `fetch` в этих тестах бросает
 исключение (`blockRealNetwork()`). Общие помощники (fetch-мок, `makeClient`, `catchGreenApiError`, условные
 учётные данные с токеном-заглушкой `TEST-TOKEN-placeholder-not-a-secret`, idInstance — `ID_INSTANCE`) —

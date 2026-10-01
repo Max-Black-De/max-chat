@@ -34,7 +34,14 @@ export {
 export type { RetryHint, GreenApiErrorInit } from './errors';
 export { parseQuota466Body, parseQuotaExceededNotification } from './quota';
 export type { QuotaSummary, QuotaSource } from './quota';
-export { maskToken, maskUrl, redactSecret, TOKEN_MASK } from './mask';
+export {
+  maskToken,
+  maskUrl,
+  redactSecret,
+  redactPersonalData,
+  PERSONAL_DATA_MASK,
+  TOKEN_MASK,
+} from './mask';
 export {
   buildMethodUrl,
   buildMaskedUrl,

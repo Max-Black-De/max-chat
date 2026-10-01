@@ -6,7 +6,7 @@ import {
   type GreenApiError,
   type RetryHint,
 } from './errors';
-import { redactSecret, truncate } from './mask';
+import { sanitizeReason } from './mask';
 import { parseQuota466Body } from './quota';
 import type { GreenApiLogger } from './clientTypes';
 import type { GreenApiMethod } from './url';
@@ -232,7 +232,7 @@ function extractReason(text: string, secret: string): string | undefined {
   }
   reason ??= text;
   reason = reason.trim();
-  return reason ? truncate(redactSecret(reason, secret)) : undefined;
+  return reason ? sanitizeReason(reason, secret) : undefined;
 }
 
 /**
@@ -362,7 +362,7 @@ export function statusFalseError(
 ): GreenApiError | null {
   if (!isRecord(value) || value.status !== false) return null;
   const raw = typeof value.reason === 'string' ? value.reason : '';
-  const reason = truncate(redactSecret(raw, ctx.secret));
+  const reason = sanitizeReason(raw, ctx.secret);
   const err = errorFor(ctx, req, classifyReason(reason), { httpStatus, reason });
   ctx.logger?.warn?.('GREEN-API error', err.toJSON());
   return err;
