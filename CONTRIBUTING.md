@@ -1,5 +1,26 @@
 # Как вносить изменения
 
+## Ветки
+
+- Общая рабочая копия `/workspace/max-chat` всегда стоит на `main`. Переключать в ней ветки
+  (`git checkout` / `git switch`) нельзя: ею одновременно пользуются несколько человек и агентов.
+- Каждая задача делается в своей ветке с именем `<тип>/<краткое-имя>`, где тип — `feat/`, `fix/`,
+  `test/`, `docs/`, `refactor/`, `chore/`, `ci/` (как в коммитах), например `feat/f2-login-screen`.
+- И в своём git worktree. Общий каталог для worktree — `/workspace/max-chat-wt/`:
+
+  ```bash
+  git -C /workspace/max-chat worktree add /workspace/max-chat-wt/<имя> -b <ветка> main
+  cd /workspace/max-chat-wt/<имя>
+  npm ci   # в каждом worktree свой node_modules
+  ```
+
+- Перед вливанием ветка перебазируется на свежий `main` (`git rebase main`), и все проверки
+  должны быть зелёными: `npm run lint && npm run typecheck && npm test && npm run build`.
+- Пока нет GitHub и PR, ветка вливается в `main` только fast-forward:
+  `git -C /workspace/max-chat merge --ff-only <ветка>`. Кто вливает — решает Руководитель.
+- Ветки, уже влитые в `main`, не переписываются (никаких rebase, amend и force-push).
+- После вливания worktree удаляется: `git -C /workspace/max-chat worktree remove /workspace/max-chat-wt/<имя>`.
+
 ## Коммиты — Conventional Commits (ТЗ Д-8)
 
 Формат заголовка: `<type>(<scope>)?: <subject>`, например:
