@@ -3,10 +3,11 @@
  * Значения условные (НФТ-11), токен фиктивный.
  */
 import { vi } from 'vitest';
-import type { ApiMethodName } from '../api/types';
+import type { ApiMethodName } from '../../api/types';
 
 export const TEST_ID_INSTANCE = '1101000000';
-export const TEST_TOKEN = 'test0token0000000000000000000000000000000000000000';
+/** Заглушка, заведомо не похожая на настоящий токен (репозиторий публичный). */
+export const TEST_TOKEN = 'TEST-TOKEN-placeholder-not-a-secret';
 export const TEST_API_URL = 'https://api.green-api.com';
 
 export type Reply =

@@ -14,7 +14,7 @@ import {
   memoryStorage,
   routeFetch,
   type Reply,
-} from '../test/greenApiMock';
+} from '../test/fixtures/greenApiMock';
 
 const CREDS = { idInstance: TEST_ID_INSTANCE, apiTokenInstance: TEST_TOKEN, apiUrl: TEST_API_URL };
 

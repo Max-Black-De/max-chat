@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { STORAGE_SCHEMA_VERSION, createAppStorage, storageKey } from '../storage';
-import { memoryStorage } from '../../test/greenApiMock';
+import { memoryStorage } from '../../test/fixtures/greenApiMock';
 
 const isNumArray = (v: unknown): v is number[] =>
   Array.isArray(v) && v.every((x) => typeof x === 'number');

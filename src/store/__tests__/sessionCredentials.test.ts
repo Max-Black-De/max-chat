@@ -5,7 +5,12 @@ import {
   loadCredentials,
   saveCredentials,
 } from '../sessionCredentials';
-import { TEST_API_URL, TEST_ID_INSTANCE, TEST_TOKEN, memoryStorage } from '../../test/greenApiMock';
+import {
+  TEST_API_URL,
+  TEST_ID_INSTANCE,
+  TEST_TOKEN,
+  memoryStorage,
+} from '../../test/fixtures/greenApiMock';
 
 const CREDS = { idInstance: TEST_ID_INSTANCE, apiTokenInstance: TEST_TOKEN, apiUrl: TEST_API_URL };
 
