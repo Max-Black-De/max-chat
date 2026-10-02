@@ -260,8 +260,14 @@ body {
   font-size: 1.5rem;
 }
 .login__subtitle {
+  margin: 0 0 4px;
+  color: var(--c-text-muted);
+}
+.login__hint {
   margin: 0 0 20px;
   color: var(--c-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.4;
 }
 .login__error {
   margin: 0 0 16px;

@@ -86,14 +86,21 @@ afterEach(() => {
 });
 
 describe('экран входа (п. 1.1–1.2, §4.0 п. 1)', () => {
-  it('1.1: поля, «Войти», ссылка на кабинет; apiUrl предзаполнен и свёрнут в «Дополнительно»', () => {
+  it('1.1: поля подключения, подсказка об авторизации по QR и ссылка на кабинет; apiUrl предзаполнен и свёрнут в «Дополнительно»', () => {
     setup();
     expect(screen.getByLabelText('ID инстанса (idInstance)')).toBe(input('login-idInstance'));
     const token = screen.getByLabelText<HTMLInputElement>('Токен (apiTokenInstance)');
     expect(token.type).toBe('password');
     expect(input('login-apiUrl').value).toBe('https://api.green-api.com');
     expect(screen.getByTestId<HTMLDetailsElement>('login-advanced').open).toBe(false);
-    expect(screen.getByTestId('login-submit')).toHaveTextContent('Войти');
+    expect(
+      screen.getByRole('heading', { name: 'Подключение к MAX через GREEN-API' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Введите учётные данные инстанса GREEN-API')).toBeInTheDocument();
+    expect(
+      screen.getByText('Сначала авторизуйте аккаунт MAX по QR-коду в личном кабинете GREEN-API.'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('login-submit')).toHaveTextContent('Подключить инстанс');
     expect(screen.getByTestId('login-cabinet-link')).toHaveAttribute('rel', 'noopener noreferrer');
     expect(
       screen.getByText(

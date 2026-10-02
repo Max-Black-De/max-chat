@@ -61,6 +61,7 @@ export function LoginScreen({ defaultApiUrl }: { defaultApiUrl: string }) {
       <form className="login__card" onSubmit={onSubmit} noValidate data-testid="login-form">
         <h1 className="login__title">{UI_TEXTS.loginTitle}</h1>
         <p className="login__subtitle">{UI_TEXTS.loginSubtitle}</p>
+        <p className="login__hint">{UI_TEXTS.loginHint}</p>
 
         {state.loginError ? (
           <p className="login__error" role="alert" data-testid="login-error">

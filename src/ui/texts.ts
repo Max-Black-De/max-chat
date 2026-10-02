@@ -4,8 +4,9 @@
  */
 export const UI_TEXTS = {
   appTitle: 'MAX Chat',
-  loginTitle: 'Вход в MAX Chat',
-  loginSubtitle: 'Учётные данные инстанса GREEN-API',
+  loginTitle: 'Подключение к MAX через GREEN-API',
+  loginSubtitle: 'Введите учётные данные инстанса GREEN-API',
+  loginHint: 'Сначала авторизуйте аккаунт MAX по QR-коду в личном кабинете GREEN-API.',
   idInstanceLabel: 'ID инстанса (idInstance)',
   tokenLabel: 'Токен (apiTokenInstance)',
   apiUrlLabel: 'Адрес API (apiUrl)',
@@ -15,7 +16,7 @@ export const UI_TEXTS = {
   /** Не из ТЗ: подписи для скринридера (видимый текст — «показать» / «скрыть»). */
   showTokenLabel: 'показать токен',
   hideTokenLabel: 'скрыть токен',
-  submit: 'Войти',
+  submit: 'Подключить инстанс',
   submitting: 'Проверяем…',
   restoring: 'Восстанавливаем сессию…',
   cabinetLink: 'Личный кабинет GREEN-API',
